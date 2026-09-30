@@ -186,6 +186,7 @@ html:has(#intro) { overflow-anchor: none; }   /* the intro positions the page it
   opacity: clamp(0, 1 - var(--p) * 42, 1); transform: translateY(calc(var(--p) * 600px));
 }
 .intro-lockup { width: clamp(150px, 15vw, 224px); height: auto; color: var(--paper); opacity: .92; }
+
 .intro-title p { color: rgba(244, 242, 238, .62); letter-spacing: .22em; }
 
 .intro-top { position: absolute; top: 24px; left: var(--m); right: var(--m); display: flex; justify-content: space-between; align-items: center; opacity: clamp(0, (.96 - var(--p)) * 14, 1); transition: color .8s; }
@@ -202,7 +203,17 @@ html:has(#intro) { overflow-anchor: none; }   /* the intro positions the page it
 .intro-cue { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); display: grid; justify-items: center; gap: 12px; opacity: clamp(0, 1 - var(--p) * 30, .7); }
 .intro-cue i { width: 1px; height: 44px; background: linear-gradient(currentColor 0 0) 0 0 / 1px 40% no-repeat; background-color: rgba(244, 242, 238, .18); animation: cue 2.4s var(--ease-slow) infinite; }
 @keyframes cue { 0% { background-position: 0 -120%; } 100% { background-position: 0 260%; } }
-
+/* a phone on its side: little height, so the title is smaller and sits lower, and the cue gives way */
+@media (max-height: 520px) and (orientation: landscape) {
+  .intro-title { bottom: 9vh; bottom: 9svh; gap: 12px; }
+  .intro-lockup { width: 104px; }
+  .intro-title p { font-size: 10px; }
+  .intro-cue { display: none; }
+  .intro-lines { bottom: 26px; }
+  .intro-lines li { font-size: 22px; max-width: 30ch; }
+  .intro-end { gap: 12px; }
+  .intro-end-lockup { width: 120px; margin-bottom: 6px; }
+}
 /* ------------------------------------------------------------------ 01 manifesto */
 .manifesto { padding-top: clamp(140px, 16vw, 260px); }
 .manifesto .display { margin: clamp(56px, 8vw, 128px) 0 0 -.06em; }

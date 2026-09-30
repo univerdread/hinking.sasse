@@ -82,6 +82,18 @@ total about 557 KiB and load only for this experiment. Trees retain the greener 
 geometry from the tip-fix version. Foliage, people and ground cover remain procedural and limit the
 photographic result.
 
+### On phones
+
+Touch devices (and anything under 760 px wide) get a lighter scene with the same look: near trees to
+90 m with fewer whorls, a coarser terrain grid, a sparser far forest (about 420,000 pictures instead of
+800,000), less ground cover, half-resolution mountain shadows, and a render scale of 1.1 at most, lowered
+further by the adaptive resolution. The first frame does not wait for the photographic floor maps (they
+join when loaded); every shader is compiled and every buffer uploaded before it, including the far
+forest's as soon as the worker delivers it; and the terrain's patch bounds and the near trees along the
+whole flight are prepared in idle time, so scrolling never stops for them (measured with the CPU slowed
+4–6×: 4–7 ms of script per frame, no spikes). A GPU that cannot render into a half-float buffer gets the
+cut-paper version. A phone on its side gets a smaller title that clears the scroll cue.
+
 ### Where to continue the experiment
 
 - `site.js` provides the shared motion loop and terrain loader. `intro.js` selects the renderer;

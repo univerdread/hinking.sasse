@@ -321,7 +321,7 @@ const uniforms = {
   uFade: { value: 0 }, uLines: { value: 0 }, uTime: { value: 0 },
   uPath: { value: PATH.map(([x, z]) => new THREE.Vector2(x, z)) },
   uCorr: { value: new THREE.Vector4(...CORR) },
-  uNearR: { value: coarse ? 110 : 150 },
+  uNearR: { value: coarse ? 90 : 150 },
   uForest: { value: Object.assign(new THREE.DataTexture(new Uint8Array(1), 1, 1, THREE.RedFormat), { needsUpdate: true }) }, uForestBox: { value: new THREE.Vector4(0, 0, 1, 1) },
 };
 
@@ -384,7 +384,7 @@ const LIT_END = /* glsl */`
 const DITHER = 'float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }\n';
 
 // ---------------------------------------------------------------- the terrain (CDLOD)
-const GRID = coarse ? 28 : 40;          // quads per patch side
+const GRID = coarse ? 24 : 40;          // quads per patch side
 const LEAF = 16;                        // metres, the finest patch
 const LEVELS = 12;                      // up to 16 × 2^12 = 65.5 km
 const RANGE = Array.from({ length: LEVELS + 1 }, (_, l) => LEAF * 2 ** l * 2.2);
@@ -772,11 +772,11 @@ function birchGeometry(seed, cards = 46, grow = 1) {
   }
   return b.done();
 }
-const WHORLS = coarse ? 18 : 24;
+const WHORLS = coarse ? 14 : 24;
 const VARIANTS = [spruceGeometry(3, WHORLS), spruceGeometry(8, WHORLS), spruceGeometry(17, WHORLS), birchGeometry(5), birchGeometry(29)];
 // beyond LOD_R the same trees with half the whorls and wider sprays: as full at that distance, half the work
 const VARIANTS_LO = [spruceGeometry(3, WHORLS >> 1, 1.4), spruceGeometry(8, WHORLS >> 1, 1.4), spruceGeometry(17, WHORLS >> 1, 1.4), birchGeometry(5, 28, 1.25), birchGeometry(29, 28, 1.25)];
-const LOD_R = coarse ? 40 : 55;
+const LOD_R = coarse ? 32 : 55;
 const IMP_W = VARIANTS.map((g, v) => { g.computeBoundingBox(); const bb = g.boundingBox; return 2 * Math.max(-bb.min.x, bb.max.x, -bb.min.z, bb.max.z) * 1.04; });
 
 // ---------------------------------------------------------------- near trees: geometry, placed on the CPU
@@ -816,7 +816,7 @@ function treeDepthPass(tex, b) {
   };
   return m;
 }
-const NEAR_MAX = coarse ? 1400 : 3200;
+const NEAR_MAX = coarse ? 1000 : 3200;
 // per variant: the close trees (full detail) and the rest of the near ones (half), each with its depth pass
 function nearSet(geos, b) {
   const lit = [treeMaterial(spruceTex, b), treeMaterial(birchTex, b)], pre = [treeDepthPass(spruceTex, b), treeDepthPass(birchTex, b)];
@@ -873,8 +873,9 @@ function updateNear(c) {
     if (d < LOD_R + 16 && hi[t.v] < NEAR_MAX) nearHi[t.v].instanceMatrix.array.set(t.m, 16 * hi[t.v]++);   // both in the hand-over band
     if (d > LOD_R - 6 && lo[t.v] < NEAR_MAX) nearLo[t.v].instanceMatrix.array.set(t.m, 16 * lo[t.v]++);
   }
-  nearHi.forEach((m, v) => { m.count = m.userData.pre.count = hi[v]; m.instanceMatrix.needsUpdate = true; });
-  nearLo.forEach((m, v) => { m.count = m.userData.pre.count = lo[v]; m.instanceMatrix.needsUpdate = true; });
+  const upload = (m, n) => { m.count = m.userData.pre.count = n; const a = m.instanceMatrix; a.clearUpdateRanges(); a.addUpdateRange(0, Math.max(16, n * 16)); a.needsUpdate = true; };
+  nearHi.forEach((m, v) => upload(m, hi[v]));
+  nearLo.forEach((m, v) => upload(m, lo[v]));
 }
 
 // ---------------------------------------------------------------- far trees: their pictures, scattered by the GPU
@@ -976,11 +977,11 @@ onmessage = ({ data }) => {
     w.postMessage({ T: { w: t.w, h: t.h, data: t.data }, track, forest: F, rings: RINGS.map(({ cell, salt, reach, scale, tile }) => ({ cell, salt, reach, scale, tile })) });
   });
 }
-const R0 = coarse ? 520 : 780;
+const R0 = coarse ? 420 : 780;
 const RINGS = [
   { cell: CELL, salt: 0, scale: 1.0, reach: R0 + 120, tile: 1000, rIn: uniforms.uNearR.value, wIn: 25, rOut: R0, wOut: 100 },
-  { cell: CELL * 2, salt: 1, scale: 1.15, reach: coarse ? 1900 : 3700, tile: 2000, rIn: R0, wIn: 100, rOut: coarse ? 1600 : 3300, wOut: 400 },
-  { cell: CELL * 5, salt: 2, scale: 1.25, reach: 10900, tile: 2000, rIn: coarse ? 1600 : 3300, wIn: 400, rOut: 9500, wOut: 1200 },
+  { cell: coarse ? 12 : CELL * 2, salt: 1, scale: coarse ? 1.25 : 1.15, reach: coarse ? 1700 : 3700, tile: 2000, rIn: R0, wIn: 100, rOut: coarse ? 1450 : 3300, wOut: 400 },
+  { cell: coarse ? 40 : CELL * 5, salt: 2, scale: coarse ? 1.45 : 1.25, reach: coarse ? 9200 : 10900, tile: 2000, rIn: coarse ? 1450 : 3300, wIn: 400, rOut: coarse ? 8000 : 9500, wOut: 1200 },
 ];
 function ringMesh(data, ring, tx, tz, tile) {
   const g = new THREE.InstancedBufferGeometry();
@@ -1369,7 +1370,7 @@ function coverTexture() {
   }
   return canvasTex(c);
 }
-const COVER_N = coarse ? 100 : 160, COVER_CELL = 0.55, COVER_R = COVER_N * COVER_CELL / 2 - 2;
+const COVER_N = coarse ? 76 : 160, COVER_CELL = 0.55, COVER_R = COVER_N * COVER_CELL / 2 - 2;
 const coverU = { uOrigin: { value: new THREE.Vector2() } };
 const coverGeo = new THREE.InstancedBufferGeometry();
 {
@@ -1470,7 +1471,7 @@ function updateGeese(p, f) {
 
 // ---------------------------------------------------------------- the mountains' shadows
 function traceSunVis(t) {
-  const n = 192, out = new Uint8Array(n * n), s = t.w / n;
+  const n = coarse ? 128 : 192, out = new Uint8Array(n * n), s = t.w / n;
   const dx = SUN.x, dz = SUN.z, l = Math.hypot(dx, dz), tanE = SUN.y / l;
   const hAt = (gx, gz) => { gx = clamp(gx, 0, t.w - 1.001); gz = clamp(gz, 0, t.h - 1.001); const i = gx | 0, j = gz | 0, fx = gx - i, fz = gz - j, k = j * t.w + i; return mix(mix(t.data[k], t.data[k + 1], fx), mix(t.data[k + t.w], t.data[k + t.w + 1], fx), fz); };
   const span = HMAX - HMIN, cell = WM / (t.w - 1);
@@ -1597,7 +1598,7 @@ function renderFrame(p) {
   updateHikers(p);
   updateCover(cam.position, f);
   updateGeese(p, f);
-  if (hero) hero.visible = p > 0.3;
+  if (hero) hero.visible = p > 0.3 && p < 0.876;   // gone once its flat copy has taken its place: what is behind it fades like the rest
   uniforms.uHeroOut.value = sstep(0.835, 0.875, p);
   post.material.uniforms.uExposure.value = 1.0 + 0.4 * (1 - sstep(0.04, 0.3, p));
   {
@@ -1691,23 +1692,59 @@ target = pShown = DEBUG_P ?? scrollProgress();
 state();
 overlay(pShown);
 window.__intro = { p: pShown, ms: 0, bake: 'loading' };
-Promise.all([HC.terrain(canvas.dataset.src), realTexturesReady]).then(([t]) => {
+realTexturesReady.then(() => { drawn = -1; request(); });
+HC.terrain(canvas.dataset.src).then((t) => {
   T = t;
   const tex = new THREE.DataTexture(t.data, t.w, t.h, THREE.RedFormat, THREE.FloatType);
   tex.minFilter = tex.magFilter = THREE.NearestFilter; tex.needsUpdate = true;
   uniforms.uHeight.value = tex; uniforms.uRes.value.set(t.w, t.h);
+  const t0 = performance.now();
+  const far = placeFar(t);
   uniforms.uSunVis.value = traceSunVis(t);
   hero = new THREE.Mesh(heroGeometry(), heroMat); hero.frustumCulled = false; scene.add(hero);
-  const t0 = performance.now();
-  placeFar(t).then((bufs) => {
+  const standIn = ringMesh(new Float32Array(5), RINGS[0], 0, 0, 1); standIn.geometry.instanceCount = 0; scene.add(standIn);
+  far.then((bufs) => {
     bufs.forEach((tiles, i) => tiles.forEach(({ x, z, data }) => { const m = ringMesh(data, RINGS[i], x, z, RINGS[i].tile); rings.push(m); scene.add(m); }));
+    if (ready) preload(rings);
     window.__introFar = { ms: Math.round(performance.now() - t0), n: bufs.map((t) => t.reduce((a, q) => a + q.data.length / 5, 0)), tiles: rings.length };
     drawn = -1; request();
   });
   resize();
   bake();
-  ready = true; drawn = -1; request();
+  render(pShown);                                             // positions everything, so all is compiled below
+  scene.traverse((o) => { if (o.isMesh) o.visible = true; });  // the things that come later too (geese, the mountain…)
+  const go = () => { preload(); scene.remove(standIn); ready = true; drawn = -1; request(); warm(); };
+  (renderer.compileAsync ? renderer.compileAsync(scene, cam) : Promise.resolve()).then(go, go);
 });
+// draw everything once, out of view of anyone (into the scene target, all visible, nothing culled), so its
+// buffers and textures are on the GPU before the scroll needs them
+function preload(objs) {
+  const list = [];
+  (objs ? objs : [scene]).forEach((root) => root.traverse((o) => { if (o.isMesh) { list.push([o, o.visible, o.frustumCulled]); o.visible = true; o.frustumCulled = false; } }));
+  renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
+  for (const [o, v, f] of list) { o.visible = v; o.frustumCulled = f; }
+  drawn = -1;
+}
+// while nothing else is happening: the terrain's patch bounds and the near trees along the whole flight,
+// so scrolling never waits for them
+function warm() {
+  let p = 0;
+  const idle = window.requestIdleCallback || ((f) => setTimeout(() => f({ timeRemaining: () => 8 }), 40));
+  const step = (dl) => {
+    const until = performance.now() + Math.min(dl.timeRemaining(), 10);
+    while (p <= 1 && performance.now() < until) {
+      const f = flight(p), c = { x: f.x, y: f.y, z: f.z };
+      updateTerrain(c);
+      if (f.y - ground(f.x, f.z) < 60) {
+        const R = uniforms.uNearR.value + 30, ts = TILE * CELL;
+        for (let tj = Math.floor((f.z - R) / ts); tj <= Math.floor((f.z + R) / ts); tj++) for (let ti = Math.floor((f.x - R) / ts); ti <= Math.floor((f.x + R) / ts); ti++) tileTrees(ti, tj);
+      }
+      p += 0.01;
+    }
+    if (p <= 1) idle(step); else { drawn = -1; request(); window.__introWarm = true; }
+  };
+  idle(step);
+}
 addEventListener('scroll', request, { passive: true });
 addEventListener('resize', () => { drawn = -1; request(); });
 new IntersectionObserver(([e]) => { visible = e.isIntersecting; state(); if (visible) request(); }).observe(section);

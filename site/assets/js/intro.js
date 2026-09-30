@@ -29,7 +29,15 @@ if (params.get('scene') === 'ascent') {
 }
 // The opening: the same flight rendered in 3D with light, shadow and air (intro-real.js). With reduced
 // motion there is only the title card (below); without WebGL 2, or with ?scene=simple, this file plays.
-const webgl2 = (() => { try { const c = document.createElement('canvas'), gl = c.getContext('webgl2'); gl?.getExtension('WEBGL_lose_context')?.loseContext(); return !!gl; } catch (e) { return false; } })();
+// (it renders into a half-float buffer: a GPU that cannot gets this version, not a black screen)
+const webgl2 = (() => {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const ok = !!gl && !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return ok;
+  } catch (e) { return false; }
+})();
 if (!reduced && webgl2 && params.get('scene') !== 'simple') {
   section.classList.add('intro--real');
   const s = document.createElement('script');
