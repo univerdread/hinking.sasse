@@ -24,6 +24,14 @@ if (params.get('scene') === 'ascent') {
   document.head.append(s);
   return;
 }
+// ?scene=real: an experiment, the same flight rendered in 3D with light, shadow and air (intro-real.js)
+if (params.get('scene') === 'real' && !reduced) {
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.src = (document.body.dataset.root || '') + 'site/assets/js/intro-real.js';
+  document.head.append(s);
+  return;
+}
 
 // A scene that belongs to the page: scrolling down plays it, scrolling back up plays it backwards, as
 // often as anyone likes. The first visit in a tab (and every reload) starts at the top of it; coming
