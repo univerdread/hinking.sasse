@@ -1,0 +1,28 @@
+{
+  "licence": "CC0",
+  "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "sources": [
+    {
+      "title": "Forest Ground 03",
+      "page": "https://polyhaven.com/a/forrest_ground_03",
+      "artist": "Rob Tuytel",
+      "maps": [
+        {
+          "file": "floor-diff.jpg",
+          "remote": "Textures/jpg/1k/forrest_ground_03/forrest_ground_03_diff_1k.jpg",
+          "md5": "0a63f012ae0e3663451b5a0e5049975a"
+        },
+        {
+          "file": "floor-normal.jpg",
+          "remote": "Textures/jpg/1k/forrest_ground_03/forrest_ground_03_nor_gl_1k.jpg",
+          "md5": "9f44096b43a0f796ae6f52d7fe784698"
+        },
+        {
+          "file": "floor-arm.jpg",
+          "remote": "Textures/jpg/1k/forrest_ground_03/forrest_ground_03_arm_1k.jpg",
+          "md5": "6f166341687a85219ad54e22aabd2547"
+        }
+      ]
+    }
+  ]
+}

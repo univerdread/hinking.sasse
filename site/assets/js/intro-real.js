@@ -1,6 +1,6 @@
-// An experiment, loaded only with ?scene=real: the opening flight up the Abisko valley rendered in 3D,
-// with light, shadow and air instead of cut paper. Same path, timing, captions and ending as intro.js
-// (which stays the default and is untouched); delete this file and vendor/three.min.js to remove it.
+// The opening: the flight up the Abisko valley rendered in 3D, with light, shadow and air. intro.js loads
+// it; the cut-paper version there (same path, captions and ending, a longer scroll) plays with
+// ?scene=simple and wherever WebGL 2 is missing.
 //
 // The land is the Abisko elevation model (43 m cells), interpolated bicubically on the GPU and given
 // detail below its cells by value noise, with analytic normals so the light is exact at every level
@@ -125,7 +125,9 @@ function flight(p) {
 
 // ---------------------------------------------------------------- the forest: one rule, here and on the GPU
 const CELL = 5;                                   // metres: one tree at most per cell
-const treeline = (x, z) => 610 + 60 * (noise(x / 700, z / 700) - 0.5);
+// The measured valley keeps its treeline; the fictional continuation rises into birch woodland
+// at the foot of the final mountain instead of putting a 600 m floor right above the forest.
+const treeline = (x, z) => 610 + 170 * sstep(0, 2200, Math.max(-x, x - WM, -z, z - HM, 0)) + 60 * (noise(x / 700, z / 700) - 0.5);
 function forestAt(x, z, mh) {
   if (mh <= WATER + 1.5) return 0;
   const tl = treeline(x, z);
@@ -244,7 +246,10 @@ float pathDist(vec2 p) {
   for (int k = 0; k < ${PATH.length - 1}; k++) { vec2 a = uPath[k], v = uPath[k + 1] - a; float t = clamp(dot(p - a, v) / dot(v, v), 0.0, 1.0); d = min(d, length(p - a - v * t)); }
   return d;
 }
-float treeline(vec2 p) { return 610.0 + 60.0 * (vnoise(p / 700.0) - 0.5); }
+float treeline(vec2 p) {
+  float outside = max(max(max(-p.x, p.x - uMapSize.x), max(-p.y, p.y - uMapSize.y)), 0.0);
+  return 610.0 + 170.0 * sst(0.0, 2200.0, outside) + 60.0 * (vnoise(p / 700.0) - 0.5);
+}
 float forestAt(vec2 p, float mh) {
   if (mh <= uWater + 1.5) return 0.0;
   float tl = treeline(p);
@@ -357,6 +362,12 @@ function noiseTexture() {
   return t;
 }
 uniforms.uNoise = { value: noiseTexture() };
+// The photographic maps are loaded only for this renderer. Neutral placeholders keep the
+// procedural floor usable if an asset fails; normal/ARM data never passes through an sRGB decode.
+uniforms.uFloorColor = { value: uniforms.uNoise.value };
+uniforms.uFloorNormal = { value: uniforms.uNoise.value };
+uniforms.uFloorARM = { value: uniforms.uNoise.value };
+uniforms.uFloorReady = { value: 0 };
 
 // the same additions to every lit material: mountain shadows, light through leaves, the air, the mask
 const LIT_FRAG_HEAD = `${MASK}uniform float uFade, uLines, uTime, uTrans, uNearR;\nuniform sampler2D uNoise;\nvarying vec3 vW;\n${NOISE}${LAND}${AIR}${SKY}`;
@@ -384,6 +395,17 @@ const tGeo = new THREE.InstancedBufferGeometry();
   const pos = [], idx = [];
   for (let j = 0; j <= GRID; j++) for (let i = 0; i <= GRID; i++) pos.push(i / GRID, 0, j / GRID);
   for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) { const a = j * (GRID + 1) + i, b = a + 1, c = a + GRID + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+  // A narrow wall below each patch edge closes the sub-pixel gaps between fine and coarse
+  // triangles during a morph. The top stays on the surface; only the hidden copy drops down.
+  const edge = [];
+  for (let i = 0; i < GRID; i++) edge.push([i / GRID, 0]);
+  for (let j = 0; j < GRID; j++) edge.push([1, j / GRID]);
+  for (let i = GRID; i > 0; i--) edge.push([i / GRID, 1]);
+  for (let j = GRID; j > 0; j--) edge.push([0, j / GRID]);
+  edge.push(edge[0]);
+  const start = pos.length / 3;
+  for (const [x, z] of edge) pos.push(x, 0, z, x, -1, z);
+  for (let i = 0; i < edge.length - 1; i++) { const a = start + i * 2; idx.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
   tGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   tGeo.setIndex(idx);
   tGeo.setAttribute('aNode', new THREE.InstancedBufferAttribute(new Float32Array(MAXN * 4), 4).setUsage(THREE.DynamicDrawUsage));
@@ -402,10 +424,18 @@ terrainMat.onBeforeCompile = (sh) => {
   vec2 mr = uMorph[lvl];
   float mk = clamp((distance(vec3(wxz.x, groundH(wxz).x, wxz.y), uCamPos) - mr.x) / (mr.y - mr.x), 0.0, 1.0);
   wxz -= fract(gp * uGrid * 0.5) * 2.0 / uGrid * aNode.z * mk;
-  vec3 gh = groundLod(wxz, aNode.z / uGrid * (1.0 + mk));
+  // Filter detail by world distance, shared across patches. Patch-local spacing made even
+  // coincident edge vertices disagree as their individual morph amounts changed.
+  float detail = max(${(LEAF / GRID).toFixed(6)}, length(wxz - uCamPos.xz) / (2.2 * uGrid));
+  vec3 gh = groundLod(wxz, detail);
+  gh.x += min(position.y, 0.0) * max(3.0, aNode.z / uGrid * 2.0);
   vec3 objectNormal = normalize(vec3(-gh.y, 1.0, -gh.z));`)
     .replace('#include <begin_vertex>', 'vec3 transformed = vec3(wxz.x, gh.x, wxz.y); vW = transformed; vGrad = gh.yz;');
-  sh.fragmentShader = LIT_FRAG_HEAD + FOREST + 'varying vec2 vGrad;\nuniform sampler2D uForest;\nuniform vec4 uForestBox;\n' + sh.fragmentShader
+  sh.fragmentShader = LIT_FRAG_HEAD + FOREST + `varying vec2 vGrad;
+uniform sampler2D uForest, uFloorColor, uFloorNormal, uFloorARM;
+uniform vec4 uForestBox;
+uniform float uFloorReady;
+` + sh.fragmentShader
     .replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
   // what grows here: forest floor below the treeline, autumn heath above, rock where it is steep, snow high up
   float hgt = vW.y, dist = distance(vW, uCamPos);
@@ -432,7 +462,8 @@ terrainMat.onBeforeCompile = (sh) => {
   float bog = flatG * smoothstep(0.56, 0.7, hA.r) * (1.0 - smoothstep(tl + 80.0, tl + 200.0, hgt));
   heath = mix(heath, mix(${glsl(lin(164, 118, 62))}, ${glsl(lin(34, 40, 38))}, smoothstep(0.6, 0.7, hB.a)), bog);
   float fo = texture(uForest, (vW.xz - uForestBox.xy) / uForestBox.zw).r;
-  vec3 c = mix(heath, floorC, smoothstep(0.02, 0.3, fo + (n1 - 0.5) * 0.12) * (1.0 - smoothstep(tl + 30.0, tl + 90.0, hgt)));
+  float woodland = smoothstep(0.02, 0.3, fo + (n1 - 0.5) * 0.12) * (1.0 - smoothstep(tl + 30.0, tl + 90.0, hgt));
+  vec3 c = mix(heath, floorC, woodland);
   // under and beyond the trees: the canopy, where the pictures of the trees give out
   c = mix(c, c * 0.55, fo * (1.0 - smoothstep(60.0, 20.0, dist)) * 0.6);
   c = mix(c, ${glsl(lin(20, 34, 26))}, fo * smoothstep(2600.0, 3600.0, dist) * 0.85);
@@ -452,9 +483,27 @@ terrainMat.onBeforeCompile = (sh) => {
   c = mix(c, ${glsl(lin(104, 92, 72))} * (0.75 + 0.5 * n3), trail);
   float wet = step(hgt, uWater + 0.02);
   c = mix(c, ${glsl(lin(34, 46, 50))}, wet);
+  // Two differently oriented views of the seamless 2 m litter tile break up its repetition.
+  // Modulate the existing biome colour so the near detail fades into the same distant terrain.
+  float litter = uFloorReady * (1.0 - smoothstep(24.0, 95.0, dist)) * max(woodland, trail) * (1.0 - wet) * (1.0 - snow) * (1.0 - smoothstep(0.25, 0.45, slope));
+  vec3 litterARM = vec3(1.0), litterNormal = vec3(0.0, 0.0, 1.0);
+  if (litter > 0.001) {
+    vec2 uvA = vW.xz * 0.5, uvB = vec2(-uvA.y, uvA.x) + vec2(0.37, 0.61);
+    float tileMix = smoothstep(0.25, 0.75, nB.b);
+    vec3 litterColor = mix(texture(uFloorColor, uvA).rgb, texture(uFloorColor, uvB).rgb, tileMix);
+    vec3 ratio = clamp(litterColor / vec3(0.339, 0.218, 0.132), vec3(0.35), vec3(2.4));
+    c *= mix(vec3(1.0), ratio, litter * 0.75);
+    litterARM = mix(texture(uFloorARM, uvA).rgb, texture(uFloorARM, uvB).rgb, tileMix);
+    vec3 na = texture(uFloorNormal, uvA).rgb * 2.0 - 1.0;
+    vec3 nb = texture(uFloorNormal, uvB).rgb * 2.0 - 1.0;
+    // Bring the rotated sample's tangent directions back into world X/Z before blending.
+    nb.xy = vec2(nb.y, -nb.x);
+    litterNormal = normalize(mix(na, nb, tileMix));
+  }
   diffuseColor.rgb = c;`)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor = mix(mix(1.0, 0.6, snow), 0.06, wet);`)
+  roughnessFactor = mix(mix(1.0, 0.6, snow), 0.06, wet);
+  roughnessFactor = mix(roughnessFactor, clamp(litterARM.g, 0.65, 1.0), litter);`)
     .replace('#include <normal_fragment_begin>', /* glsl */`#include <normal_fragment_begin>
   vec3 nWorld = vec3(0.0, 1.0, 0.0);
   if (dist >= 170.0 && wet < 0.5) {
@@ -469,10 +518,13 @@ terrainMat.onBeforeCompile = (sh) => {
     vec3 a = vnoised(vW.xz / 2.3), b = vnoised(vW.xz / 0.6 + 7.0);
     vec2 g = vGrad + (a.yz / 2.3 * 0.55 + b.yz / 0.6 * 0.07) * (1.0 - smoothstep(20.0, 160.0, dist)) * (1.0 - wet);
     g += wet * vnoised(vW.xz / 3.0 + uTime * 0.2).yz * 0.03;
+    g -= litterNormal.xy / max(litterNormal.z, 0.3) * litter * 0.28;
     nWorld = normalize(vec3(-g.x, 1.0, -g.y));
     normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
   }`)
     .replace('#include <lights_fragment_begin>', LIT_AFTER_LIGHTS)
+    .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+  reflectedLight.indirectDiffuse *= mix(1.0, 0.55 + 0.45 * litterARM.r, litter);`)
     .replace('#include <fog_fragment>', /* glsl */`
   if (wet > 0.5) {
     vec3 vd = normalize(vW - uCamPos), rd = reflect(vd, nWorld); rd.y = abs(rd.y);
@@ -517,7 +569,9 @@ function selectNode(x, z, size, lvl, c) {
   const add = (ax, az, s, l) => { if (nodeCount < MAXN) { nodeArr.set([ax, az, s, l], nodeCount * 4); nodeCount++; } };
   if (lvl === 0 || boxDist(x, z, size, c) > RANGE[lvl - 1]) { add(x, z, size, lvl); return true; }
   const hs = size / 2;
-  for (const [ox, oz] of [[0, 0], [hs, 0], [0, hs], [hs, hs]]) if (!selectNode(x + ox, z + oz, hs, lvl - 1, c)) add(x + ox, z + oz, hs, lvl);
+  // A child outside the finer range still has a child's physical size. Labelling it with its
+  // parent's level gave equal-sized neighbours different morphs and different ground heights.
+  for (const [ox, oz] of [[0, 0], [hs, 0], [0, hs], [hs, hs]]) if (!selectNode(x + ox, z + oz, hs, lvl - 1, c)) add(x + ox, z + oz, hs, lvl - 1);
   return true;
 }
 function updateTerrain(c) {
@@ -603,6 +657,28 @@ function birchTexture() {
 }
 const spruceTex = spruceTexture(), birchTex = birchTexture();
 
+const realTextureNames = ['floor-color', 'floor-normal', 'floor-arm'];
+const realTextureLoader = new THREE.TextureLoader();
+const realTexturesReady = Promise.allSettled(realTextureNames.map((name) =>
+  realTextureLoader.loadAsync(new URL(`../textures/real/${name}.webp`, import.meta.url).href)
+)).then((results) => {
+  const maps = results.map((result, i) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.warn(`Intro texture ${realTextureNames[i]} unavailable; using the procedural fallback.`);
+    return null;
+  });
+  if (maps.slice(0, 3).every(Boolean)) {
+    maps.slice(0, 3).forEach((tex, i) => {
+      tex.colorSpace = i === 0 ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      tex.needsUpdate = true;
+    });
+    [uniforms.uFloorColor.value, uniforms.uFloorNormal.value, uniforms.uFloorARM.value] = maps;
+    uniforms.uFloorReady.value = 1;
+  } else maps.slice(0, 3).forEach((tex) => tex?.dispose());
+});
+
 // ---------------------------------------------------------------- the trees' geometry (height 1)
 function builder() {
   const P = [], N = [], U = [], C = [], I = [];
@@ -641,16 +717,18 @@ function builder() {
 // branch two crossed sprays; normals point out of the crown so it is lit as a volume, not as cards
 function spruceGeometry(seed, whorls, widen = 1) {
   const r = rng(seed), b = builder(), R0 = 0.19 + 0.04 * r();
-  b.tube([[0, -0.05, 0], [0, 0.5, 0], [0, 0.97, 0]], 0.014, 0.002, 0.875, 1, 5, 0.85);
+  const leanX = (r() - 0.5) * 0.025, leanZ = (r() - 0.5) * 0.025;
+  b.tube([[0, -0.05, 0], [leanX * 0.35, 0.5, leanZ * 0.35], [leanX, 1, leanZ]], 0.014, 0.0007, 0.875, 1, 5, 0.85);
   for (let i = 0; i < whorls; i++) {
-    const t = i / whorls, y = 0.1 + 0.88 * t ** 0.92;
-    const R = R0 * (1 - (y - 0.1) / 0.9) ** 0.8 + 0.012;
+    const t = (i + 0.4) / whorls, y = 0.1 + 0.885 * t ** 0.94;
+    const R = R0 * (1 - t) ** 0.95 + 0.003;
     const n = 4 + (r() * 2 | 0), a0 = r() * 6.28;
     for (let k = 0; k < n; k++) {
       const a = a0 + k / n * 6.28 + (r() - 0.5) * 0.5, L = R * (0.8 + 0.4 * r());
       const dir = [Math.cos(a), 0, Math.sin(a)], side = [-Math.sin(a), 0, Math.cos(a)];
-      const droop = 0.3 + 0.25 * r() + 0.2 * (1 - t);
-      const s0 = [dir[0] * 0.01, y, dir[2] * 0.01], s1 = [dir[0] * L, y - L * droop, dir[2] * L];
+      const droop = mix(0.4 + 0.25 * r(), -0.35, sstep(0.7, 1, t));
+      const cx = leanX * y, cz = leanZ * y, by = y + (r() - 0.5) * Math.min(0.018, R * 0.3);
+      const s0 = [cx + dir[0] * 0.008, by, cz + dir[2] * 0.008], s1 = [cx + dir[0] * L, by - L * droop, cz + dir[2] * L];
       const w = L * 0.55 * widen, ao = 0.55 + 0.45 * t ** 0.6 * (0.8 + 0.2 * r());
       for (const tilt of [-0.62, 0.62]) {
         // the spray's plane: turned about the branch by ±35°
@@ -658,16 +736,13 @@ function spruceGeometry(seed, whorls, widen = 1) {
         const across = [side[0] * Math.cos(tilt) - 0 * up[0], -Math.sin(tilt), side[2] * Math.cos(tilt)];
         const e = (p, s) => [p[0] + across[0] * s, p[1] + across[1] * s, p[2] + across[2] * s];
         const nOut = (p) => { const l = Math.hypot(p[0], p[2]) || 1; const v = [p[0] / l, 0.55, p[2] / l]; const m = Math.hypot(...v); return v.map((q) => q / m); };
-        const q0 = e(s0, -w * 0.25), q1 = e(s0, w * 0.25), q2 = e(s1, w * 0.5), q3 = e(s1, -w * 0.5);
+        const q0 = e(s0, -w * 0.45), q1 = e(s0, w * 0.45), q2 = e(s1, w * 0.16), q3 = e(s1, -w * 0.16);
         b.quad(q0, q1, q2, q3, [nOut(q0), nOut(q1), nOut(q2), nOut(q3)], [[0, 0], [0, 1], [0.86, 1], [0.86, 0]], ao);
       }
     }
   }
-  // the leader at the very top
-  for (const a of [0, Math.PI / 2]) {
-    const d = [Math.cos(a) * 0.02, 0, Math.sin(a) * 0.02];
-    b.quad([-d[0], 0.92, -d[2]], [d[0], 0.92, d[2]], [d[0], 1.02, d[2]], [-d[0], 1.02, -d[2]], [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]], [[0.6, 0.32], [0.6, 0.68], [0.86, 0.68], [0.86, 0.32]], 1);
-  }
+  // The upper whorls converge on the thin leader. Upright rectangles cropped from the branch
+  // texture used to leave three bright prongs above every crown, especially in the baked trees.
   return b.done();
 }
 // a mountain birch: two or three crooked stems from one foot, a few branches, an open crown of leaf sprays
@@ -881,7 +956,10 @@ onmessage = ({ data }) => {
   const track = [along(S0)];
   for (let s = S0 + 200; s < LEN * 1.1; s += 200) track.push(along(s));
   track.push(along(LEN * 1.1));
-  const xs = track.map((q) => q[0]), zs = track.map((q) => q[1]), cell = 20;
+  // The density texture covers the whole view to the mountain, even beyond the last tree ring.
+  // Fine tree placement stays around the actual flight; the distant ring fills the approach.
+  const forestTrack = [...track, along(LEN * 1.1 + HERO.dist)];
+  const xs = forestTrack.map((q) => q[0]), zs = forestTrack.map((q) => q[1]), cell = 20;
   const F = { cell, x0: Math.min(...xs) - 5000, z0: Math.min(...zs) - 5000 };
   F.n = Math.ceil((Math.max(...xs) + 5000 - F.x0) / cell); F.m = Math.ceil((Math.max(...zs) + 5000 - F.z0) / cell);
   return new Promise((res) => {
@@ -902,6 +980,7 @@ const R0 = coarse ? 520 : 780;
 const RINGS = [
   { cell: CELL, salt: 0, scale: 1.0, reach: R0 + 120, tile: 1000, rIn: uniforms.uNearR.value, wIn: 25, rOut: R0, wOut: 100 },
   { cell: CELL * 2, salt: 1, scale: 1.15, reach: coarse ? 1900 : 3700, tile: 2000, rIn: R0, wIn: 100, rOut: coarse ? 1600 : 3300, wOut: 400 },
+  { cell: CELL * 5, salt: 2, scale: 1.25, reach: 10900, tile: 2000, rIn: coarse ? 1600 : 3300, wIn: 400, rOut: 9500, wOut: 1200 },
 ];
 function ringMesh(data, ring, tx, tz, tile) {
   const g = new THREE.InstancedBufferGeometry();
@@ -1431,7 +1510,7 @@ const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMater
       c += vec3(-0.006, 0.0, 0.012) * (1.0 - l) * (1.0 - l);
       c = 0.02 + c * 0.97;
       vec2 q = vUv - 0.5; c *= 1.0 - dot(q, q) * 0.3;
-      vec3 srgb = toSRGB(c) + (h12(gl_FragCoord.xy + fract(uTime) * 91.0) - 0.5) * 0.026;
+      vec3 srgb = toSRGB(c) + (h12(gl_FragCoord.xy + fract(uTime) * 91.0) - 0.5) * 0.012;
       gl_FragColor = vec4(mix(vec3(0.9569, 0.949, 0.9333), srgb, clamp(m, 0.0, 1.0)), 1.0);
     }`,
 }));
@@ -1612,7 +1691,7 @@ target = pShown = DEBUG_P ?? scrollProgress();
 state();
 overlay(pShown);
 window.__intro = { p: pShown, ms: 0, bake: 'loading' };
-HC.terrain(canvas.dataset.src).then((t) => {
+Promise.all([HC.terrain(canvas.dataset.src), realTexturesReady]).then(([t]) => {
   T = t;
   const tex = new THREE.DataTexture(t.data, t.w, t.h, THREE.RedFormat, THREE.FloatType);
   tex.minFilter = tex.magFilter = THREE.NearestFilter; tex.needsUpdate = true;

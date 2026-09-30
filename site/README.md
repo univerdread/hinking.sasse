@@ -12,10 +12,10 @@ site/tools/build_assets.py   photos, contour maps, heightmaps, Scandinavia map, 
 site/tools/build_pages.py    renders every page from the data (shared head, header, footer, menu)
 site/assets/css/site.css     the design system
 site/assets/js/site.js       the motion system: one rAF loop, scene progress (--p), parallax, maps, rope
-site/assets/js/intro.js      the opening (home only): the Abisko valley as layered vector terrain, reversible
+site/assets/js/intro.js      picks the opening; itself the cut-paper version (?scene=simple, and without WebGL 2)
 site/assets/js/intro-ascent.js  the earlier raymarched version, only loaded with ?scene=ascent
-site/assets/js/intro-real.js  experiment (branch experiment/photoreal): the flight in 3D (three.js), only with ?scene=real
-site/assets/js/vendor/three.min.js  three.js r186 (MIT), bundled and minified; used only by intro-real.js
+site/assets/js/intro-real.js  the opening (home only): the flight up the Abisko valley in 3D (three.js), reversible
+site/assets/js/vendor/three.min.js  three.js r186 (MIT), bundled and minified; used by intro-real.js
 site/assets/js/relief.js     the terrain objects: the destinations model (home) and a trip's block with its route
 site/assets/js/contours.js   live contour layers: marching squares over the heightmaps, flowing with scroll
 ```
@@ -50,6 +50,10 @@ Real: coordinates, summit heights, stations and huts, the terrain, the routes' s
 
 ## The intro
 
+The opening is the 3D flight described below (`intro-real.js`). The cut-paper version described in this
+section (`intro.js`) plays with `?scene=simple`, and in browsers without WebGL 2. With
+`prefers-reduced-motion` there is only the title card.
+
 It is part of the page: scrolling down plays it, scrolling back up plays it backwards. The first visit
 in a tab and every reload start at the top; coming back to Home later in the visit starts on the title
 card, with the flight above it. It is a short flight up the Abisko valley, the first day of the next
@@ -62,17 +66,49 @@ contour drawing on paper, and the twin peak at the end of the valley becomes the
 *Skip intro* and *Replay the intro* cut to the end or the start. `?p=0.4` freezes the camera. `?scene=ascent` plays the earlier, raymarched 3D
 version (`intro-ascent.js`), kept for comparison.
 
-## The 3D experiment (`?scene=real`)
+## The 3D intro (the default)
 
-The same flight, timing, captions and ending, rendered in 3D: the Abisko elevation model as a CDLOD
+The same flight, captions and ending, rendered in 3D, with a shorter scroll: 280vh on desktop and
+250vh below 860px (180vh and 150vh of pinned travel, respectively). The Abisko elevation model is a CDLOD
 terrain with detail below its cells, mountains beyond it and a valley to the club's mountain; spruce and
 mountain birch as geometry near the camera and as baked pictures further off (placed once, in a worker,
 by the same rule); ground cover, the group of six walking, geese; a low October sun with traced mountain
 shadows, tree shadows, light through the leaves and light shafts; mist and haze; ACES tone mapping and a
 grade. The mountain at the end has the mark's outline, and a flat copy of it becomes the title card's
-logo. Adaptive resolution keeps it near 60 fps; `?p=0.4` freezes it, `?hide=near,rings,terrain,cover,shafts`
-leaves parts out for measuring. Delete `intro-real.js`, `vendor/` and the three lines in `intro.js` that
-load it to remove the experiment.
+logo. Adaptive resolution targets 60 fps; `?p=0.4` freezes it, `?hide=near,rings,terrain,cover,shafts`
+leaves parts out for measuring. The forest floor uses photographic colour, OpenGL normal, and packed
+AO/roughness maps, fading back to the procedural terrain between 24 and 95 m. The three local WebP maps
+total about 557 KiB and load only for this experiment. Trees retain the greener foliage and light
+geometry from the tip-fix version. Foliage, people and ground cover remain procedural and limit the
+photographic result.
+
+### Where to continue the experiment
+
+- `site.js` provides the shared motion loop and terrain loader. `intro.js` selects the renderer;
+  `build_pages.py` gives the experimental module its own content hash so reloads pick up changes.
+- `intro-real.js`: `flight()` maps normalised scroll to the camera. The final mountain and its
+  transition into the mark live around `HERO` and `heroGeometry()`; captions and the title card are updated
+  near the end of the file. `site.css` owns the pinned section length and overlay layout.
+- Terrain selection is in `selectNode()` and `updateTerrain()`. A patch's level must match its physical
+  size. Shader detail filtering uses world distance, and perimeter skirts close the remaining gaps
+  during transitions between resolutions. These three pieces prevent the bright grid seams.
+- `spruceGeometry()` supplies both nearby trees and the baked distant sprites. Upper branches taper
+  into the thin leader; separate upright texture cards previously made the crowns look forked. The
+  photographic conifer atlas and denser branch geometry were reverted because they looked yellow and
+  cost more to render. The tip correction remains in both the nearby trees and the distant sprites.
+- `terrainMat.onBeforeCompile` blends the photographic floor maps in world coordinates at their 2 m
+  scale. Colour modulation retains the existing biome colours, two tile orientations reduce repetition,
+  and normal/roughness/AO detail fades out with distance. Water, snow and steep rock retain their materials.
+  Failed texture loads retain the procedural fallback. The renderer's own grain is sufficient; the CSS
+  grain overlay is disabled for this version.
+- `forestAt()` and `treeline()` have matching CPU and GLSL rules. The measured valley retains its
+  treeline; the synthetic continuation raises it gradually. `placeFar()` builds the density texture
+  through the final mountain, and `RINGS` supplies three distances of trees to cover its approach.
+
+Keep `.intro-stage` clipped with `overflow: clip`: `hidden` makes it internally scrollable when a
+translated overlay or focused link extends beyond its bounds, which can shift the canvas inside the
+sticky section. Check forward and reverse scrolling, skip/replay, and the mobile breakpoint after edits.
+Rebuild pages with `python3 site/tools/build_pages.py` whenever JS or CSS changes, then reload the preview.
 
 ## Motion language
 
@@ -137,3 +173,10 @@ graded and cropped, authors and licences in the footer and `tools/credits.json`.
 `pip install pillow-avif-plugin`; without it the job writes WebP only). Terrain and contours from Mapzen Terrain Tiles on AWS Open Data. The SASSE and SSE logos
 (`assets/img/partners/`) are those organisations' own files, taken from sasse.se and hhs.se. Fonts: Newsreader
 and Schibsted Grotesk (SIL OFL, licences in `assets/fonts/`).
+
+The 3D experiment uses Poly Haven's [Forest Ground 03](https://polyhaven.com/a/forrest_ground_03)
+(Rob Tuytel), under CC0. Sources, original checksums and licence links
+are in `tools/real-textures.json` and the site's credits. Rebuild the optimised maps with
+`python3 site/tools/build_real_textures.py` (Pillow and curl); verified originals are cached in the ignored
+`tools/raw/real-textures/`. Normal and ARM maps are linear data; the colour map and procedural foliage atlas use
+sRGB.

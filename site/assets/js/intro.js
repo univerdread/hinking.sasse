@@ -1,4 +1,7 @@
-// The opening: a short flight up the Abisko valley, the first day of the next expedition. The terrain
+// The cut-paper opening, now the alternative: it plays with ?scene=simple, and wherever WebGL 2 is
+// missing; the default is the same flight in 3D (intro-real.js), loaded below.
+//
+// A short flight up the Abisko valley, the first day of the next expedition. The terrain
 // is real (the elevation model the relief objects use), drawn as layers of cut paper, near to far:
 // spruce forest, the lake, open fell, snow on the tops. Vector shapes on a 2D canvas at the screen's
 // own resolution, so it is sharp everywhere and light on any machine. At the end the colour drains
@@ -24,14 +27,18 @@ if (params.get('scene') === 'ascent') {
   document.head.append(s);
   return;
 }
-// ?scene=real: an experiment, the same flight rendered in 3D with light, shadow and air (intro-real.js)
-if (params.get('scene') === 'real' && !reduced) {
+// The opening: the same flight rendered in 3D with light, shadow and air (intro-real.js). With reduced
+// motion there is only the title card (below); without WebGL 2, or with ?scene=simple, this file plays.
+const webgl2 = (() => { try { const c = document.createElement('canvas'), gl = c.getContext('webgl2'); gl?.getExtension('WEBGL_lose_context')?.loseContext(); return !!gl; } catch (e) { return false; } })();
+if (!reduced && webgl2 && params.get('scene') !== 'simple') {
+  section.classList.add('intro--real');
   const s = document.createElement('script');
   s.type = 'module';
-  s.src = (document.body.dataset.root || '') + 'site/assets/js/intro-real.js';
+  s.src = (document.body.dataset.root || '') + 'site/assets/js/intro-real.js?v=' + (document.currentScript?.dataset.realVersion || '');
   document.head.append(s);
   return;
 }
+section.classList.add('intro--simple');
 
 // A scene that belongs to the page: scrolling down plays it, scrolling back up plays it backwards, as
 // often as anyone likes. The first visit in a tab (and every reload) starts at the top of it; coming

@@ -148,13 +148,14 @@ html:has(#intro) { overflow-anchor: none; }   /* the intro positions the page it
 .nav-toggle { display: none; }
 
 /* ------------------------------------------------------------------ intro */
-.intro { position: relative; height: 320vh; background: var(--paper); }
-.intro-stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; background: var(--pine); color: rgba(244, 242, 238, .86); --p: 0; }
+.intro { position: relative; height: 280vh; background: var(--paper); }
+.intro.intro--simple { height: 320vh; }
+.intro-stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: clip; background: var(--pine); color: rgba(244, 242, 238, .86); --p: 0; }
 .intro-stage.is-light { color: var(--ink); }
 .intro-stage.is-light .intro-cue i { background-color: rgba(29, 29, 27, .18); }
 .intro canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* once it has played, the stage stays where it is and becomes the first screen: the title card */
-.intro.is-done { height: 100vh; height: 100svh; }
+.intro.is-done, .intro.intro--simple.is-done { height: 100vh; height: 100svh; }   /* reduced motion: the title card only, at every width */
 .intro.is-done .intro-stage { position: relative; background: var(--paper); color: var(--ink); }
 .intro.is-done :is(canvas, .intro-grain, .intro-title, .intro-top, .intro-lines, .intro-cue) { display: none; }
 
@@ -176,6 +177,8 @@ html:has(#intro) { overflow-anchor: none; }   /* the intro positions the page it
   opacity: calc(.09 * clamp(0, (.97 - var(--p)) * 8, 1)); mix-blend-mode: overlay;
   animation: grain 1.2s steps(6) infinite;
 }
+/* The 3D renderer applies grain itself; a second overlay hides its fine foliage and ground detail. */
+.intro--real .intro-grain { display: none; }
 @keyframes grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-7%, 4%); } 40% { transform: translate(5%, -9%); } 60% { transform: translate(-3%, 8%); } 80% { transform: translate(9%, 2%); } 100% { transform: translate(0, 0); } }
 
 .intro-title {
@@ -372,7 +375,7 @@ details[open]::details-content { height: auto; }
   .join-form { margin-top: 64px; grid-template-columns: 1fr; }
   .footer-cols { grid-template-columns: 1fr 1fr; }
 
-  .intro { height: 290vh; }
+  .intro.intro--simple { height: 290vh; }
         }
 @media (max-width: 520px) {
     .footer-cols { grid-template-columns: 1fr; }
@@ -833,7 +836,8 @@ details[open]::details-content { height: auto; }
   .safety, .how, .board, .jf { grid-template-columns: 1fr; row-gap: 28px; }
   .hist li { grid-template-columns: 5em 3em 1fr; }
   .hist .label { grid-column: 1; } .hist-no { grid-column: 2; } .hist-name { grid-column: 3; } .hist .small { grid-column: 3; text-align: left; }
-  .intro { height: 280vh; }
+  .intro { height: 250vh; }
+  .intro.intro--simple { height: 280vh; }
 }
 
 /* ------------------------------------------------------------------ the club's own photographs

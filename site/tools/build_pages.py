@@ -102,8 +102,12 @@ def ver(rel):
     return hashlib.sha1((SITE / "assets" / rel).read_bytes()).hexdigest()[:8]
 
 
-def head(d, title, desc, page, scripts=(), preload=()):
-    js = "".join(f'<script defer src="{u(d)}site/assets/js/{s}.js?v={ver(f"js/{s}.js")}"></script>' for s in dict.fromkeys(("site", "contours", *scripts)))
+def head(d, title, desc, page, scripts=(), preload=(), modules=()):
+    tags = []
+    for s in dict.fromkeys(("site", "contours", *scripts)):
+        experiment = f' data-real-version="{ver("js/intro-real.js")}"' if s == "intro" else ""
+        tags.append(f'<script defer{experiment} src="{u(d)}site/assets/js/{s}.js?v={ver(f"js/{s}.js")}"></script>')
+    js = "".join(tags)
     return f"""<!doctype html>
 <html lang="en" class="page-{page}">
 <head>
@@ -125,7 +129,7 @@ def head(d, title, desc, page, scripts=(), preload=()):
 <link rel="apple-touch-icon" href="{u(d)}site/assets/img/apple-touch-icon.png">
 <link rel="preload" href="{u(d)}site/assets/fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="{u(d)}site/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
-{"".join(f'<link rel="preload" href="{u(d)}{p}" as="image" fetchpriority="high">' for p in preload)}
+{"".join(f'<link rel="preload" href="{u(d)}{p}" as="image" fetchpriority="high">' for p in preload)}{"".join(f'<link rel="modulepreload" href="{u(d)}{m}">' for m in modules)}
 <link rel="stylesheet" href="{u(d)}site/assets/css/site.css?v={ver("css/site.css")}">
 <script>document.documentElement.classList.add('js');</script>
 {js}
@@ -170,6 +174,10 @@ def credits_html():
         title = c["title"].removeprefix("File:").rsplit(".", 1)[0]
         items.append(f'<li><a href="{esc(c["page"])}" rel="noopener">{esc(title)}</a>, {esc(c["artist"] or "unknown")}, '
                      f'<a href="{lic[c["lic"]]}" rel="noopener">{c["lic"]}</a>. Graded and cropped.</li>')
+    textures = json.loads((SITE / "tools/real-textures.json").read_text())
+    for c in textures["sources"]:
+        items.append(f'<li>3D intro: <a href="{esc(c["page"])}" rel="noopener">{esc(c["title"])}</a>, '
+                     f'{esc(c["artist"])}, <a href="{esc(textures["licence_url"])}" rel="noopener">CC0</a> via Poly Haven.</li>')
     return '<ul class="credits-list">' + "".join(items) + "</ul>"
 
 
@@ -389,7 +397,8 @@ def home():
     done = len([e for e in EXP if e["status"] == "completed"])
     return (head(d, "Hiking Club — SASSE, Stockholm School of Economics",
                  "Hiking Club is the outdoor club of SASSE, the Student Association at the Stockholm School of Economics: day hikes around Stockholm, and the mountains in the north.",
-                 "home", ("contours", "relief", "intro"), preload=("site/assets/terrain/abisko.png",))
+                 "home", ("contours", "relief", "intro"), preload=("site/assets/terrain/abisko.png",),
+                 modules=(f"site/assets/js/intro-real.js?v={ver('js/intro-real.js')}", "site/assets/js/vendor/three.min.js"))
             + header(d, "") + intro() + f"""
 <main id="main">
 
@@ -422,7 +431,7 @@ def home():
 <section class="section next" data-theme="paper" aria-labelledby="next-title">
   {rowhead("01", "Next expedition", status_tag(nxt))}
   <a class="next-card" href="{exp_url(d, nxt)}">
-    <figure class="next-img frame" data-reveal="image"><div class="para" data-speed="0.08">{img(d, nxt["images"]["hero"], "A single hiker in a red jacket on snow facing Lapporten.", "(min-width: 900px) 62vw, 100vw", vt="exp-004", frame=3 / 2)}</div></figure>
+    <figure class="next-img frame" data-reveal="image"><div class="para" data-speed="0.08">{img(d, nxt["images"]["hero"], "Snow-covered mountains and forest near Abisko beneath a pink winter sky.", "(min-width: 900px) 62vw, 100vw", vt="exp-004", frame=3 / 2)}</div></figure>
     <div class="next-meta">
       <p class="label">Expedition <span class="tnum">{nxt["no"]}</span></p>
       <h3 id="next-title" class="h-xl" data-lines>{nxt["name"]}</h3>

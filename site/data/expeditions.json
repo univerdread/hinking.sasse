@@ -268,12 +268,12 @@
         "Map and compass, the club brings the rest"
       ],
       "images": {
-        "hero": "abisko-lapporten-figure",
+        "hero": "abisko-winter-dusk",
         "gallery": [
           [
-            "abisko-lapporten-figure",
+            "abisko-winter-dusk",
             "006.1",
-            "Lapporten from the frozen shore of Torneträsk, midwinter."
+            "Snow-covered mountains and forest near Abisko beneath a pink winter sky."
           ],
           [
             "abisko-lapporten-winter",
@@ -367,7 +367,7 @@
     {
       "key": "winter",
       "name": "Winter",
-      "img": "winter-blue-hour",
+      "img": "winter-night-edge",
       "season": "December – April",
       "level": "Open to all",
       "group": "8–16",
