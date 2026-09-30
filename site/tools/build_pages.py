@@ -18,6 +18,10 @@ DER = json.loads((SITE / "data/derived.json").read_text())
 EXP = DATA["expeditions"]
 BY = {e["no"]: e for e in EXP}
 ACT = DATA["activities"]
+CLUB = DATA["club"]
+IMGS = json.loads((SITE / "data/images.json").read_text())
+# where the site is published: link previews need absolute URLs (change this if it moves to its own domain)
+SITE_URL = "https://univerdread.github.io/hinking.sasse/"
 esc = html.escape
 
 STATUS = {"registering": "Registering", "announced": "Announced", "completed": "Completed"}
@@ -48,14 +52,26 @@ def u(d, path=""):
     return "../" * d + path
 
 
-def img(d, name, alt, sizes="100vw", cls="", eager=False, vt=None, w=None):
-    small = Image.open(IMG / f"{name}-960.webp").size
-    big = Image.open(IMG / f"{name}-1920.webp").size
-    vt_s = f' style="view-transition-name: {vt}"' if vt else ""
-    return (f'<img{f" class={chr(34)}{cls}{chr(34)}" if cls else ""} src="{u(d)}site/assets/img/{name}-1920.webp" '
-            f'srcset="{u(d)}site/assets/img/{name}-960.webp {small[0]}w, {u(d)}site/assets/img/{name}-1920.webp {big[0]}w" '
-            f'sizes="{sizes}" width="{big[0]}" height="{big[1]}" {"fetchpriority=\"high\"" if eager else "loading=\"lazy\""} '
-            f'decoding="async" alt="{esc(alt)}"{vt_s}>')
+WIDTHS = (640, 960, 1280, 1920)
+
+
+def img(d, name, alt, sizes="100vw", cls="", eager=False, vt=None, frame=None):
+    """A photograph: AVIF where build_assets found it smaller, WebP otherwise, each at the widths it has;
+    a blurred placeholder painted behind it until it arrives. `frame` is the aspect ratio of the box it
+    fills: when the photo is wider than that box, object-fit crops its sides, so it is drawn wider than
+    the box and `sizes` asks for more pixels accordingly."""
+    e = IMGS[name]
+    W, H = e["sizes"][-1]
+    if frame and W / H > frame * 1.05:
+        k = (W / H) / frame
+        sizes = re.sub(r"(\d+(?:\.\d+)?)vw", lambda m: f"{float(m.group(1)) * k:.0f}vw", sizes)
+    base = f"{u(d)}site/assets/img/{name}"
+    srcset = lambda ext: ", ".join(f"{base}-{w}.{ext} {e['sizes'][i][0]}w" for i, w in enumerate(WIDTHS) if (IMG / f"{name}-{w}.{ext}").exists())
+    style = f"background-image:url({e['lq']})" + (f";view-transition-name:{vt}" if vt else "")
+    tag = (f'<img class="lq{" " + cls if cls else ""}" src="{base}-960.webp" srcset="{srcset("webp")}" sizes="{sizes}" '
+           f'width="{W}" height="{H}" {"fetchpriority=" + chr(34) + "high" + chr(34) if eager else "loading=" + chr(34) + "lazy" + chr(34)} '
+           f'decoding="async" alt="{esc(alt)}" style="{style}">')
+    return f'<picture><source type="image/avif" srcset="{srcset("avif")}" sizes="{sizes}">{tag}</picture>' if e["avif"] else tag
 
 
 def logo(d, name, cls, tone="paper"):
@@ -85,7 +101,7 @@ def ver(rel):
     return hashlib.sha1((SITE / "assets" / rel).read_bytes()).hexdigest()[:8]
 
 
-def head(d, title, desc, page, scripts=()):
+def head(d, title, desc, page, scripts=(), preload=()):
     js = "".join(f'<script defer src="{u(d)}site/assets/js/{s}.js?v={ver(f"js/{s}.js")}"></script>' for s in dict.fromkeys(("site", "contours", *scripts)))
     return f"""<!doctype html>
 <html lang="en" class="page-{page}">
@@ -95,12 +111,20 @@ def head(d, title, desc, page, scripts=()):
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
 <meta name="theme-color" content="#F4F2EE">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Hiking Club · SASSE">
 <meta property="og:title" content="{esc(title)}">
 <meta property="og:description" content="{esc(desc)}">
-<meta property="og:image" content="{u(d)}site/assets/img/abisko-lapporten-figure-1920.webp">
+<meta property="og:image" content="{SITE_URL}site/assets/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Hiking Club: a group walking a forest trail, in the club's illustrated style.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="{u(d)}site/assets/img/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{u(d)}site/assets/img/apple-touch-icon.png">
 <link rel="preload" href="{u(d)}site/assets/fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="{u(d)}site/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+{"".join(f'<link rel="preload" href="{u(d)}{p}" as="image" fetchpriority="high">' for p in preload)}
 <link rel="stylesheet" href="{u(d)}site/assets/css/site.css?v={ver("css/site.css")}">
 <script>document.documentElement.classList.add('js');</script>
 {js}
@@ -203,7 +227,7 @@ def log_row(d, e, cls=""):
     """The archive row: opens on hover from its centre line onto the photograph."""
     return f"""<li class="log-item{cls}">
   <a href="{exp_url(d, e)}">
-    <span class="log-img" aria-hidden="true" style="background-image: url({u(d)}site/assets/img/{e['images']['hero']}-960.webp)"></span>
+    <span class="log-img" aria-hidden="true" data-img="{u(d)}site/assets/img/{e['images']['hero']}-960.webp"></span>
     <span class="log-no tnum">{e['no']}</span>
     <span class="log-name">{esc(e['name'])}</span>
     <span class="log-coord">{esc(e["region"])}</span>
@@ -319,7 +343,7 @@ def intro():
       <svg class="intro-end-lockup" viewBox="0 0 332 242.9" role="img" aria-label="Hiking Club"><use href="#lockup"/></svg>
       <p class="intro-end-sasse">SASSE <span aria-hidden="true">·</span> Stockholm School of Economics</p>
       <span class="intro-end-line" aria-hidden="true"></span>
-      <a class="intro-end-replay label" href="./?intro">Replay the intro</a>
+      <a class="intro-end-replay label" href="#top">Replay the intro <span aria-hidden="true">↑</span></a>
     </div>
   </div>
 </section>
@@ -349,14 +373,18 @@ def home():
     d = 0
     nxt = BY["004"]
     S = DER["scandinavia"]
-    acts = "".join(f'<li data-act="{i}"><a href="{u(d, "activities/")}#{a["key"]}"><span class="tnum">0{i + 1}</span><span class="disc-word">{a["name"]}</span>'
-                   f'<span class="disc-meta label">{esc(a["season"])} · {esc(a["level"])}</span></a></li>' for i, a in enumerate(ACT))
-    shots = "".join(f'<figure class="disc-shot frame" data-act="{i}" data-vt="act-{a["key"]}">{img(d, a["img"], a["name"], "(min-width: 900px) 40vw, 100vw")}</figure>' for i, a in enumerate(ACT))
+    first = lambda t: t.split(". ")[0].rstrip(".") + "."
+    acts = "".join(f'<li data-reveal style="--i:{i}"><a href="{u(d, "activities/")}#{a["key"]}">'
+                   f'<figure class="disc-shot frame" data-vt="act-{a["key"]}">{img(d, a["img"], a["name"], "(min-width: 1100px) 19vw, (min-width: 700px) 30vw, 72vw", frame=4 / 5)}</figure>'
+                   f'<p class="disc-meta label"><span class="tnum">0{i + 1}</span>{esc(a["season"])}</p>'
+                   f'<h3 class="disc-word">{a["name"]}</h3><p class="disc-text">{esc(first(a["text"]))}</p>'
+                   f'<p class="disc-level label">{esc(a["level"])}</p></a></li>' for i, a in enumerate(ACT))
     rows = "".join(log_row(d, BY[n]) for n in ("002", "003", "001"))
     tour_json, tour_caps = tour(d)
+    done = len([e for e in EXP if e["status"] == "completed"])
     return (head(d, "Hiking Club — SASSE, Stockholm School of Economics",
                  "Hiking Club is the outdoor club of SASSE, the Student Association at the Stockholm School of Economics. Day trails, rock, ice and the long way north.",
-                 "home", ("contours", "relief", "intro"))
+                 "home", ("contours", "relief", "intro"), preload=("site/assets/terrain/abisko.png",))
             + header(d, "") + intro() + f"""
 <main id="main">
 
@@ -374,10 +402,10 @@ def home():
   </div>
   <div class="statement-body">
     <dl class="facts" data-reveal>
-      <div><dd class="tnum">2026</dd><dt>Founded</dt></div>
-      <div><dd class="tnum">{len(ACT)}</dd><dt>Activities</dt></div>
-      <div><dd class="tnum">{len([e for e in EXP if e["status"] == "completed"])}</dd><dt>Trips completed</dt></div>
-      <div><dd class="tnum">{RAIL_KM:,}<small>km</small></dd><dt>North by night train</dt></div>
+      <div><dd class="tnum">{CLUB["founded"]}</dd><dt>Founded</dt></div>
+      <div><dd class="tnum"><span data-count="{CLUB["members"]}">{CLUB["members"]}</span></dd><dt>Members</dt></div>
+      <div><dd class="tnum"><span data-count="{done}">{done}</span></dd><dt>Trips completed</dt></div>
+      <div><dd class="tnum"><span data-count="{RAIL_KM}">{RAIL_KM:,}</span><small>km</small></dd><dt>North by night train</dt></div>
     </dl>
     <div class="statement-text">
       <p class="lead" data-reveal>Hiking Club is the hiking and outdoor club of SASSE, the Student Association at the Stockholm School of Economics.</p>
@@ -389,7 +417,7 @@ def home():
 <section class="section next" data-theme="paper" aria-labelledby="next-title">
   {rowhead("01", "Next trip", status_tag(nxt))}
   <a class="next-card" href="{exp_url(d, nxt)}">
-    <figure class="next-img frame" data-reveal="image"><div class="para" data-speed="0.08">{img(d, nxt["images"]["hero"], "A single hiker in a red jacket on snow facing Lapporten.", "(min-width: 900px) 62vw, 100vw", vt="exp-004")}</div></figure>
+    <figure class="next-img frame" data-reveal="image"><div class="para" data-speed="0.08">{img(d, nxt["images"]["hero"], "A single hiker in a red jacket on snow facing Lapporten.", "(min-width: 900px) 62vw, 100vw", vt="exp-004", frame=3 / 2)}</div></figure>
     <div class="next-meta">
       <p class="label">Expedition <span class="tnum">{nxt["no"]}</span></p>
       <h3 id="next-title" class="h-xl" data-lines>{nxt["name"]}</h3>
@@ -420,15 +448,10 @@ def home():
   </div>
 </section>
 
-<section class="home-disc scene" data-scene data-theme="pine" aria-labelledby="disc-title">
-  <div class="disc-pin">
-    {rowhead("03", "What we do", "Five activities", h2=True)}
-    <div class="disc-grid">
-      <ol class="disc-words" id="disc-title-list">{acts}</ol>
-      <div class="disc-stage" aria-hidden="true">{shots}</div>
-    </div>
-    <a class="link home-more" href="{u(d, "activities/")}">All activities →</a>
-  </div>
+<section class="section home-disc" data-theme="pine" aria-label="What we do">
+  {rowhead("03", "What we do", "Five activities", h2=True)}
+  <ol class="disc-cards">{acts}</ol>
+  <a class="link home-more" href="{u(d, "activities/")}">All activities →</a>
 </section>
 
 <section class="section home-archive" data-theme="paper" aria-labelledby="arch-title">
@@ -492,7 +515,7 @@ def expeditions():
     for e in up:
         rows.append(f"""<li class="dossier-row" data-reveal>
   <a href="{exp_url(d, e)}">
-    <figure class="dossier-row-img frame">{img(d, e["images"]["hero"], "", "(min-width: 900px) 34vw, 100vw", vt="exp-" + e["no"])}</figure>
+    <figure class="dossier-row-img frame">{img(d, e["images"]["hero"], "", "(min-width: 900px) 34vw, 100vw", vt="exp-" + e["no"], frame=4 / 3)}</figure>
     <span class="dossier-row-no label tnum">Exp. {e["no"]}</span>
     <span class="dossier-row-name" style="view-transition-name: name-{e["no"]}">{esc(e["name"])}</span>
     <span class="dossier-row-coord label">{esc(e["region"])}</span>
@@ -619,7 +642,7 @@ def expedition(e):
   <ul class="pack">{"".join(f'<li data-reveal><span class="pack-box" aria-hidden="true"></span>{esc(x)}</li>' for x in e["packing"])}</ul>
 </section>"""
 
-    gallery = "".join(f'<figure class="gal-item frame" data-reveal="image">{img(d, n, cap, "(min-width: 900px) 45vw, 100vw")}<figcaption><b>{no}</b> {esc(cap)}</figcaption></figure>'
+    gallery = "".join(f'<figure class="gal-item frame" data-reveal="image">{img(d, n, cap, "(min-width: 900px) 45vw, 100vw", frame=4 / 3)}<figcaption><b>{no}</b> {esc(cap)}</figcaption></figure>'
                       for n, no, cap in e["images"]["gallery"][1:])
     cta = {"registering": f'<a class="btn btn-snow" href="{u(d, "join/")}?trip={e["no"]}">Register for {e["no"]}<span class="btn-arrow" aria-hidden="true">→</span></a><p class="small">Registration closes {e.get("closes", "")}. {e.get("placesLeft", "")} of {e["group"]} places left.</p>',
            "announced": f'<p class="h-lg">Registration opens {e.get("opens", "")}.</p><a class="btn btn-snow" href="{u(d, "join/")}">Become a member to hear first<span class="btn-arrow" aria-hidden="true">→</span></a>',
@@ -668,7 +691,7 @@ def archive():
         es = [e for e in EXP if e["year"] == y]
         groups.append(f'<li class="year"><p class="year-no label tnum">{y}</p><ol class="log">{"".join(log_row(d, e, "" if e["status"] == "completed" else " log-next") for e in reversed(es))}</ol></li>')
     cards = "".join(f"""<a class="amap-card" data-card="{e["no"]}" href="{exp_url(d, e)}" tabindex="-1" aria-hidden="true">
-  <span class="amap-photo">{img(d, e["images"]["hero"], "", "22vw")}</span>
+  <span class="amap-photo">{img(d, e["images"]["hero"], "", "22vw", frame=4 / 3)}</span>
   <span class="label tnum">{e["no"]} · {e["short"]}</span><span class="amap-name">{esc(e["name"])}</span>
   <span class="label">{esc(e["region"])}</span></a>""" for e in EXP)
     links = "".join(f'<li><a href="{exp_url(d, e)}" data-hover="{e["no"]}"><span class="tnum">{e["no"]}</span> {esc(e["name"])}</a></li>' for e in EXP)
@@ -705,7 +728,7 @@ def activities():
         scenes.append(f"""<section id="{a["key"]}" class="act act--{a["key"]} scene" data-scene data-theme="{ {"expeditions": "navy", "hiking": "pine"}.get(a["key"], "paper") }" aria-labelledby="act-{a["key"]}">
   <div class="act-pin">
     {env}
-    <figure class="act-img frame"><div class="para" data-speed="0.06">{img(d, a["img"], "", "(min-width: 900px) 46vw, 100vw", vt="act-" + a["key"])}</div></figure>
+    <figure class="act-img frame"><div class="para" data-speed="0.06">{img(d, a["img"], "", "(min-width: 900px) 40vw, 100vw", vt="act-" + a["key"], frame=0.86)}</div></figure>
     <div class="act-text">
       <p class="label tnum">0{i + 1} / 0{len(ACT)}</p>
       <h2 id="act-{a["key"]}" class="act-h">{a["name"]}</h2>

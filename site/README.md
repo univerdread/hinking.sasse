@@ -5,13 +5,14 @@ repo root. Pages are generated from one dataset; assets live in `site/`.
 
 ```
 index.html, expeditions/, archive/, activities/, the-club/, join/   generated pages (do not edit by hand)
-site/data/expeditions.json   the source of truth: expeditions 001–005, activities
+site/data/expeditions.json   the source of truth: the club (founded, members), expeditions 001–005, activities
+site/data/images.json        written by build_assets photos: each photo's sizes, AVIF or not, its placeholder
 site/data/derived.json       computed from open elevation data: routes, profiles, terrain, map positions
 site/tools/build_assets.py   photos, contour maps, heightmaps, Scandinavia map, least-cost routes, logo
 site/tools/build_pages.py    renders every page from the data (shared head, header, footer, menu)
 site/assets/css/site.css     the design system
 site/assets/js/site.js       the motion system: one rAF loop, scene progress (--p), parallax, maps, rope
-site/assets/js/intro.js      the opening (home only): the Abisko valley as layered vector terrain, plays once
+site/assets/js/intro.js      the opening (home only): the Abisko valley as layered vector terrain, reversible
 site/assets/js/intro-ascent.js  the earlier raymarched version, only loaded with ?scene=ascent
 site/assets/js/relief.js     the terrain objects: the destinations model (home) and a trip's block with its route
 site/assets/js/contours.js   live contour layers: marching squares over the heightmaps, flowing with scroll
@@ -38,7 +39,7 @@ Real: coordinates, summit heights, stations and huts, the terrain, the routes' s
 
 | Route | Purpose |
 |---|---|
-| `/` | The ascent, a title card, then an overview: statement, next expedition, 1,002 km north, activities, archive, the club, join |
+| `/` | The intro, a title card, then an overview: statement and facts, next expedition, the night train north, activities, archive, the club, join |
 | `/expeditions/` | Upcoming dossiers (status, dates, difficulty, distance, places), then the completed ones |
 | `/expeditions/<no>-<name>/` | One dossier per expedition: facts, route map + elevation profile + stages, terrain model, photographs, field log, packing list, registration |
 | `/archive/` | The record by year, as a list or on the map of Scandinavia |
@@ -48,15 +49,16 @@ Real: coordinates, summit heights, stations and huts, the terrain, the routes' s
 
 ## The intro
 
-It plays on load and on every reload; walking back to Home from another page in the same visit goes
-straight to the title card. It is a short flight up the Abisko valley, the first day of the next
+It is part of the page: scrolling down plays it, scrolling back up plays it backwards. The first visit
+in a tab and every reload start at the top; coming back to Home later in the visit starts on the title
+card, with the flight above it. It is a short flight up the Abisko valley, the first day of the next
 trip, over the real terrain (the Abisko elevation model): forest by the lake, the valley, the snow on
 the tops. The landscape is drawn as layers of cut paper on a 2D canvas at the screen's own resolution,
-so it is sharp everywhere and cheap to draw. Three plain captions say what the club is. At the end the
-colour drains out of the layers until only their edges remain, a contour drawing on paper, and the
-title card forms out of it. The stage then becomes the first screen of the page: its scroll length is
-removed in the same frame, without moving what you see. `?intro` replays it (the title card's *Replay
-the intro* links there). `?p=0.4` freezes the camera. `?scene=ascent` plays the earlier, raymarched 3D
+so it is sharp everywhere and cheap to draw. It opens on a forest trail behind six members walking
+in (packs, poles, hats, backlit by a low sun), rises over them and the canopy, and three plain captions
+say what the club is. At the end the colour drains out of the layers until only their edges remain, a
+contour drawing on paper, and the twin peak at the end of the valley becomes the mark on the title card.
+*Skip intro* and *Replay the intro* cut to the end or the start. `?p=0.4` freezes the camera. `?scene=ascent` plays the earlier, raymarched 3D
 version (`intro-ascent.js`), kept for comparison.
 
 ## Motion language
@@ -102,9 +104,14 @@ Newsreader for statements, Schibsted Grotesk for information, 12 columns, hairli
 ## Performance
 
 One rAF loop for the whole site, asleep unless something moves; every canvas stops off screen; the
-relief and the rock render only when their input changed; the intro is disposed once it has played.
+relief and the rock render only when their input changed; heightmaps load as their section comes near
+(the intro's is preloaded).
 
-The intro draws each frame in under 10 ms on the CPU and only when the scroll moves it; scrolling through it holds 60 fps on an M4. Photographs are WebP at two sizes, lazy, with dimensions. Scrolling
+The intro draws each frame in under 10 ms on the CPU and only when the scroll moves it; scrolling through it holds 60 fps on an M4. Photographs come at four widths
+(640–1920), AVIF where that is clearly smaller (the grainy ones) and WebP otherwise, lazy, with
+dimensions, a `sizes` that allows for `object-fit` cropping, and a blurred 32 px placeholder inline.
+The link preview (`assets/img/og.jpg`) is the intro's first frame; `SITE_URL` in `build_pages.py` is
+where the site is published (previews need absolute URLs). Scrolling
 measures 60 fps on an M4 on every page. `prefers-reduced-motion`: no intro (the title card), no parallax,
 routes shown complete, no page-transition animation.
 
@@ -112,6 +119,7 @@ routes shown complete, no page-transition animation.
 
 Photographs of the club by its members (`club-*`, `forest-*`, `winter-*`); the rest from Wikimedia Commons,
 graded and cropped, authors and licences in the footer and `tools/credits.json`. New photos: drop them in
-`tools/raw/` as JPEG and run `python3 site/tools/build_assets.py photos`. Terrain and contours from Mapzen Terrain Tiles on AWS Open Data. The SASSE and SSE logos
+`tools/raw/` as JPEG and run `python3 site/tools/build_assets.py photos` (AVIF needs
+`pip install pillow-avif-plugin`; without it the job writes WebP only). Terrain and contours from Mapzen Terrain Tiles on AWS Open Data. The SASSE and SSE logos
 (`assets/img/partners/`) are those organisations' own files, taken from sasse.se and hhs.se. Fonts: Newsreader
 and Schibsted Grotesk (SIL OFL, licences in `assets/fonts/`).

@@ -16,7 +16,7 @@ class Layer {
     this.mouse = { x: -1e4, y: -1e4, tx: -1e4, ty: -1e4 };
     this.visible = false;
     this.dirty = true;
-    HC.terrain(`${root}site/assets/terrain/${canvas.dataset.contours}.png`).then((t) => { this.t = t; this.resize(); });
+    HC.near(canvas, () => HC.terrain(`${root}site/assets/terrain/${canvas.dataset.contours}.png`).then((t) => { this.t = t; this.resize(); }));
     new IntersectionObserver(([e]) => { this.visible = e.isIntersecting; if (this.visible) HC.wake(); }).observe(canvas);
     new ResizeObserver(() => this.t && this.resize()).observe(canvas);
     canvas.parentElement.addEventListener('pointermove', (e) => {

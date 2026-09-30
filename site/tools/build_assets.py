@@ -3,7 +3,8 @@
 
     python3 site/tools/build_assets.py [photos] [maps] [logo] [grain]
 
-photos  tools/raw/*.jpg  -> assets/img/<name>-{960,1920}.webp, one shared documentary grade
+photos  tools/raw/*.jpg  -> assets/img/<name>-{640,960,1280,1920}.{webp,avif}, one shared documentary grade;
+        a blurred placeholder for each -> data/images.json
 maps    Terrarium DEM tiles (public, AWS open data) -> assets/map/<name>.svg, real contour lines
 terrain 16-bit heightmaps (RG PNG) for the relief object and the contour layers -> assets/terrain/
 scandi  Scandinavia base map in transverse Mercator (coast + 600/1200 m) -> assets/map/scandinavia.svg
@@ -37,16 +38,59 @@ def grade(im):
     return Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8))
 
 
+WIDTHS = (640, 960, 1280, 1920)   # long edge, so the portrait photos do not balloon
+
+
+def placeholder(im):
+    """A 32 px copy, blurred again by the browser through an SVG filter: shown until the photo arrives."""
+    import base64
+    t = im.copy(); t.thumbnail((32, 32), Image.LANCZOS)
+    b = io.BytesIO(); t.save(b, "WEBP", quality=40)
+    w, h = t.size
+    svg = (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {w} {h}' preserveAspectRatio='none'>"
+           f"<filter id='b' x='0' y='0' width='1' height='1'><feGaussianBlur stdDeviation='1.1'/>"
+           f"<feComponentTransfer><feFuncA type='discrete' tableValues='1 1'/></feComponentTransfer></filter>"
+           f"<image width='{w}' height='{h}' preserveAspectRatio='none' filter='url(#b)' "
+           f"href='data:image/webp;base64,{base64.b64encode(b.getvalue()).decode()}'/></svg>")
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
 def photos():
-    for src in sorted(RAW.glob("*.jpg")):
-        im = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
-        g = grade(im)
-        sizes = []
-        for w in (960, 1920):  # long edge, so the one portrait photo does not balloon
-            out = g.copy(); out.thumbnail((w, w), Image.LANCZOS)
-            out.save(IMG / f"{src.stem}-{w}.webp", "WEBP", quality=70, method=6)
-            sizes.append(out.size)
-        print("photo", src.stem, sizes)
+    """Every photo at four widths as WebP, and as AVIF where that is clearly smaller (the grainy ones),
+    plus a placeholder; data/images.json lists what exists. From tools/raw/<name>.jpg when the original
+    is here, otherwise from the committed 1920 WebP (whose 960 and 1920 files are then left as they are).
+    AVIF needs an encoder: pip install pillow-avif-plugin."""
+    try:
+        import pillow_avif  # noqa: F401
+        avif = True
+    except ImportError:
+        avif = False
+        print("photos: no AVIF encoder (pip install pillow-avif-plugin), WebP only")
+    names = sorted({f.stem for f in RAW.glob("*.jpg")} | {f.name[:-10] for f in IMG.glob("*-1920.webp")})
+    manifest = {}
+    for name in names:
+        raw = RAW / f"{name}.jpg"
+        src = grade(ImageOps.exif_transpose(Image.open(raw)).convert("RGB")) if raw.exists() else Image.open(IMG / f"{name}-1920.webp").convert("RGB")
+        sizes, wb, ab = [], 0, 0
+        for w in WIDTHS:
+            out = src.copy(); out.thumbnail((w, w), Image.LANCZOS)
+            sizes.append(list(out.size))
+            wp = IMG / f"{name}-{w}.webp"
+            if raw.exists() or w not in (960, 1920):
+                out.save(wp, "WEBP", quality=70, method=6)
+            if avif:
+                out.save(IMG / f"{name}-{w}.avif", "AVIF", quality=55, speed=6)
+                if w < 1920:
+                    wb += wp.stat().st_size; ab += (IMG / f"{name}-{w}.avif").stat().st_size
+        use_avif = avif and ab < 0.85 * wb
+        for w in WIDTHS:       # AVIF or the in-between WebP sizes, not both (old browsers get 960 and 1920)
+            if avif and not use_avif:
+                (IMG / f"{name}-{w}.avif").unlink(missing_ok=True)
+            elif use_avif and w not in (960, 1920):
+                (IMG / f"{name}-{w}.webp").unlink(missing_ok=True)
+        manifest[name] = {"sizes": sizes, "avif": use_avif, "lq": placeholder(src)}
+        print("photo", name, sizes[-1], "avif" if use_avif else "webp", f"{ab // 1024 if use_avif else wb // 1024} KB below 1920")
+    (SITE / "data/images.json").write_text(json.dumps(manifest, indent=1))
 
 
 # ---------------------------------------------------------------- maps

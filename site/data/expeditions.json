@@ -1,5 +1,6 @@
 {
   "_note": "Source of truth for every page. Coordinates, heights and places are real; dates, group sizes, places left, costs and itineraries are illustrative until the board confirms them. Rebuild with: python3 site/tools/build_assets.py routes && python3 site/tools/build_pages.py",
+  "club": { "founded": 2026, "members": 58 },
   "expeditions": [
     {
       "no": "001",

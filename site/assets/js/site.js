@@ -46,6 +46,11 @@ window.HC = {
   onFrame(cb) { cbs.push(cb); wake(); },
   wake,
   progress,
+  // run fn once, as el comes within a screen and a half of the viewport (for the heavy things: heightmaps)
+  near(el, fn, margin = '150% 0px') {
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { io.disconnect(); fn(); } }, { rootMargin: margin });
+    io.observe(el);
+  },
   velocity: () => vel,
   // 16-bit heightmaps (R = high byte, G = low byte), shared by the contours and the relief
   terrain(src) {
@@ -103,6 +108,22 @@ const seen = new IntersectionObserver((entries) => {
 }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
 document.querySelectorAll('[data-reveal], [data-lines]').forEach((el) => seen.observe(el));
 
+// numbers count up the first time they come into view (the real figure is in the page without JS)
+if (!reduced) {
+  const counter = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    counter.unobserve(e.target);
+    const el = e.target, to = +el.dataset.count, t0 = performance.now() + 250, dur = 1600;
+    const tick = (now) => {
+      const t = clamp((now - t0) / dur);
+      el.textContent = Math.round(to * (1 - (1 - t) ** 4)).toLocaleString('en');
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }), { threshold: 0.8 });
+  document.querySelectorAll('[data-count]').forEach((el) => { el.textContent = '0'; counter.observe(el); });
+}
+
 // ---------------------------------------------------------------- navigation
 const nav = document.querySelector('[data-nav]');
 const themeIO = new IntersectionObserver((entries) => {
@@ -152,32 +173,17 @@ if (north) {
   });
 }
 
-// ---------------------------------------------------------------- what we do (home): one activity at a time
-const disc = document.querySelector('.home-disc[data-scene]');
-if (disc) {
-  const items = [...disc.querySelectorAll('.disc-words li')], shots = [...disc.querySelectorAll('.disc-shot')];
-  let shown = -1, hover = -1;
-  const show = (k) => {
-    if (k === shown) return;
-    shots.forEach((s, i) => { s.classList.toggle('was-on', i === shown); s.classList.toggle('is-on', i === k); });
-    items.forEach((li, i) => li.classList.toggle('is-on', i === k));
-    shown = k;
-  };
-  items.forEach((li, i) => {
-    li.addEventListener('pointerenter', () => { hover = i; show(i); });
-    li.addEventListener('pointerleave', () => { hover = -1; HC.wake(); });
-    li.querySelector('a').addEventListener('focus', () => { hover = i; show(i); });
-    // the photograph travels to the activity's page (a cross-document view transition by name)
-    li.querySelector('a').addEventListener('click', () => { const img = shots[i].querySelector('img'); if (img) img.style.viewTransitionName = shots[i].dataset.vt; });
-  });
-  show(0);
-  HC.onFrame(() => {
-    if (!visibleScenes.has(disc) || hover >= 0) return false;
-    const p = progress(disc);
-    show(Math.min(items.length - 1, Math.floor(clamp((p - 0.04) / 0.9) * items.length)));
-    return false;
-  });
-}
+// the archive rows' photographs (they open on hover) are fetched as the list comes near
+document.querySelectorAll('.log').forEach((l) => HC.near(l, () => l.querySelectorAll('[data-img]').forEach((el) => {
+  el.style.backgroundImage = `url("${new URL(el.dataset.img, location.href).href}")`;
+})));
+
+// ---------------------------------------------------------------- what we do (home)
+// the photograph travels to the activity's page (a cross-document view transition by name)
+document.querySelectorAll('.disc-cards a').forEach((a) => a.addEventListener('click', () => {
+  const shot = a.querySelector('.disc-shot'), img = shot?.querySelector('img');
+  if (img) img.style.viewTransitionName = shot.dataset.vt;
+}));
 
 // ---------------------------------------------------------------- expedition route (dossier)
 const route = document.querySelector('[data-route-svg]');

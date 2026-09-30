@@ -25,20 +25,27 @@ if (params.get('scene') === 'ascent') {
   return;
 }
 
-// An opening title, not a section: it plays on load (and on every reload), runs once, then it is over.
-// Coming back to Home from another page in the same visit goes straight to the title card.
+// A scene that belongs to the page: scrolling down plays it, scrolling back up plays it backwards, as
+// often as anyone likes. The first visit in a tab (and every reload) starts at the top of it; coming
+// back to Home later in the visit starts on the title card at its end, with the flight above.
 const navType = performance.getEntriesByType('navigation')[0]?.type;
-const play = DEBUG_P != null || params.has('intro') || navType === 'reload' || sessionStorage.getItem('hc-intro') !== 'seen';
-let done = false;
-function markDone() {
+const seen = (() => { try { return sessionStorage.getItem('hc-intro') === 'seen'; } catch (e) { return false; } })();
+function markDone() {                    // reduced motion: the title card only, no flight
   section.classList.add('is-done');
   root.classList.add('intro-complete');
   stage.style.setProperty('--p', '1');
-  try { sessionStorage.setItem('hc-intro', 'seen'); } catch (e) { /* private mode: replays, harmless */ }
 }
-if (!play || (reduced && DEBUG_P == null)) { markDone(); return; }
+if (reduced && DEBUG_P == null) { markDone(); return; }
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-scrollTo({ top: 0, behavior: 'instant' });
+const endY = () => section.offsetTop + (section.offsetHeight - innerHeight) * 0.96;
+const startY = (() => {
+  if (DEBUG_P != null || params.has('intro') || navType === 'reload' || !seen) return 0;
+  if (location.hash && location.hash !== '#top') return null;          // the browser goes to the anchor
+  if (navType === 'back_forward') { const y = +sessionStorage.getItem('hc-home-y'); if (y > 0) return y; }
+  return 'end';
+})();
+if (startY !== null) scrollTo({ top: startY === 'end' ? endY() : startY, behavior: 'instant' });
+addEventListener('pagehide', () => { try { sessionStorage.setItem('hc-home-y', String(Math.round(scrollY))); } catch (e) { /* private mode */ } });
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -117,7 +124,7 @@ function camera(p) {
   let hx = ahead[0] - c[0], hz = ahead[1] - c[1];
   const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl;
   // eye height among the trunks, then over the canopy, then up above the valley
-  const lift = 3.2 + 9 * sstep(0, 0.07, p) + 18 * sstep(0.08, 0.5, p) + 420 * sstep(0.6, 0.92, p) ** 1.4;   // up over the group, the canopy, the valley
+  const lift = 3.2 + 9 * sstep(0.015, 0.08, p) + 18 * sstep(0.08, 0.5, p) + 420 * sstep(0.6, 0.92, p) ** 1.4;   // up over the group, the canopy, the valley
   let g = 0;
   for (const [ox, oz] of [[0, 0], [30, 0], [-30, 0], [0, 30], [0, -30]]) g += ground(c[0] + ox, c[1] + oz);
   const y = g / 5 + lift;
@@ -152,8 +159,17 @@ function outline(poly, n) {
 }
 const OUT_L = outline(MARK_L, 22), OUT_R = outline(MARK_R, 22), OUT_K = outline(MARK_K, 10);
 
-// the club on the trail: six hikers a little ahead, walking on as the camera lifts over them
-const HIKERS = Array.from({ length: 6 }, (_, i) => ({ s: 201 + i * 3.2 + (i % 2) * 0.6, off: (i % 2 ? 0.3 : -0.25), pack: i === 1 || i === 4 }));
+// the club on the trail: six hikers a little ahead, walking on as the camera lifts over them. Each is
+// dressed for a cold October morning; big packs with a sleeping mat, daypacks, poles, hats.
+const HIKERS = [
+  { jacket: [150, 62, 44], pack: [44, 52, 50], pad: [217, 142, 60], big: true, hat: [214, 204, 184], pom: true, poles: true },
+  { jacket: [48, 64, 86], pack: [217, 142, 60], pad: [62, 98, 104], big: true, hat: [52, 56, 58], hair: [58, 40, 30] },
+  { jacket: [184, 142, 64], pack: [40, 58, 48], big: false, hair: [150, 116, 70], tail: true, poles: true },
+  { jacket: [72, 88, 64], pack: [98, 68, 48], pad: [62, 98, 104], big: true, hat: [150, 62, 44], pom: true },
+  { jacket: [116, 44, 50], pack: [217, 142, 60], pad: [44, 52, 50], big: true, hat: [214, 204, 184], poles: true },
+  { jacket: [58, 62, 64], pack: [56, 74, 92], big: false, hat: [217, 142, 60], pom: true, hair: [40, 30, 24] },
+].map((h, i) => ({ ...h, s: 201 + i * 4.4 + (i % 2) * 0.9, off: [-0.28, 0.38, -0.36, 0.3, -0.22, 0.4][i], step: i * 1.7 }));
+const PANTS = [34, 38, 38], BOOT = [40, 32, 26], SOLE = [104, 92, 78], POLE = [150, 150, 146], GLOVE = [36, 38, 38];
 
 // ---------------------------------------------------------------- drawing
 const ctx2 = canvas.getContext('2d', { alpha: false });
@@ -198,17 +214,90 @@ function birch(crown, lit, stems, x, y, hPx, seed) {
     if (lit && hPx > 24 && Math.cos(a) < 0.2) { lit.moveTo(cxp - r * 0.2 + r * 0.5, cyp - r * 0.2); lit.ellipse(cxp - r * 0.2, cyp - r * 0.2, r * 0.5, r * 0.4, 0, 0, Math.PI * 2); }
   }
 }
-// a hiker from behind: legs, a body under a pack, a head
-function hiker(g, x, y, hPx, packCol, bodyCol, stride) {
-  const w = hPx * 0.26;
-  g.fillStyle = rgb(bodyCol);
-  g.beginPath();
-  g.moveTo(x - w * 0.35, y); g.lineTo(x - w * 0.12 - stride, y - hPx * 0.46); g.lineTo(x + w * 0.12 + stride, y - hPx * 0.46); g.lineTo(x + w * 0.35, y);
-  g.lineTo(x + w * 0.18, y); g.lineTo(x, y - hPx * 0.3); g.lineTo(x - w * 0.18, y); g.closePath(); g.fill();
-  g.beginPath(); g.roundRect(x - w * 0.5, y - hPx * 0.8, w, hPx * 0.38, w * 0.3); g.fill();
-  g.beginPath(); g.arc(x, y - hPx * 0.9, hPx * 0.075, 0, Math.PI * 2); g.fill();
-  g.fillStyle = rgb(packCol);
-  g.beginPath(); g.roundRect(x - w * 0.42, y - hPx * 0.79, w * 0.84, hPx * 0.3, w * 0.25); g.fill();
+// a hiker from behind, backlit by the low sun ahead and to the left: the backs in shade, a warm rim
+// along the left edges, a long shadow towards us. `ph` is the phase of their stride.
+const shade = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+const rim = (c) => mix3(c, C_SUN, 0.34);
+function hiker(g, x, y, h, who, ph, tone) {
+  g.save();
+  try { figure(g, x, y, h, who, ph, tone); } finally { g.restore(); }
+}
+function figure(g, x, y, h, who, ph, tone) {
+  const col = (c) => rgb(tone(c));
+  const fill = (c, path) => { g.fillStyle = col(c); g.fill(path); };
+  if (h < 16) {                                  // far off: a silhouette is all that shows
+    g.fillStyle = col(shade(who.jacket, 0.5));
+    g.beginPath(); g.roundRect(x - h * 0.13, y - h * 0.84, h * 0.26, h * 0.42, h * 0.08); g.arc(x, y - h * 0.9, h * 0.07, 0, Math.PI * 2);
+    g.moveTo(x - h * 0.09, y - h * 0.44); g.lineTo(x - h * 0.08, y); g.lineTo(x + h * 0.08, y); g.lineTo(x + h * 0.09, y - h * 0.44); g.fill();
+    g.fillStyle = col(who.pack); g.beginPath(); g.roundRect(x - h * 0.12, y - h * 0.82, h * 0.24, h * 0.3, h * 0.06); g.fill();
+    return;
+  }
+  const sw = Math.sin(ph), bob = -Math.abs(Math.cos(ph)) * h * 0.012;
+  y += bob;
+  // the shadow, falling back towards the camera and right
+  g.fillStyle = `rgba(6, 18, 14, ${0.26 * (1 - (tone.fade || 0))})`;
+  g.beginPath(); g.ellipse(x + h * 0.16, y - bob + h * 0.035, h * 0.26, h * 0.04, 0.12, 0, Math.PI * 2); g.fill();
+  // poles, planted a little wide
+  if (who.poles) {
+    g.strokeStyle = col(POLE); g.lineWidth = Math.max(0.8, h * 0.011); g.lineCap = 'round';
+    g.beginPath();
+    for (const k of [-1, 1]) { const hx = x + k * (h * 0.2 + k * sw * h * 0.02), hy = y - h * 0.47 + k * sw * h * 0.015; g.moveTo(hx, hy); g.lineTo(hx + k * h * 0.06, y - bob - h * 0.01 + k * sw * h * 0.03); }
+    g.stroke();
+  }
+  // legs and boots: the leg swinging back lifts its heel, and the sole shows
+  for (const k of [-1, 1]) {
+    const lift = Math.max(0, k * sw) * h * 0.06;
+    const ax = x + k * h * 0.05, ay = y - h * 0.05 - lift;
+    const leg = new Path2D();
+    leg.moveTo(x + k * h * 0.012, y - h * 0.5); leg.lineTo(x + k * h * 0.105, y - h * 0.5);
+    leg.lineTo(ax + k * h * 0.032, ay); leg.lineTo(ax - k * h * 0.03, ay); leg.closePath();
+    fill(k < 0 ? PANTS : shade(PANTS, 0.8), leg);
+    const boot = new Path2D(); boot.roundRect(ax - h * 0.042, ay - h * 0.012, h * 0.084, h * 0.058, h * 0.018);
+    fill(BOOT, boot);
+    if (lift > h * 0.012) { const sole = new Path2D(); sole.roundRect(ax - h * 0.04, ay + h * 0.03, h * 0.08, h * 0.016, h * 0.006); fill(SOLE, sole); }
+  }
+  // the jacket: shoulders, body, the arms swinging against the legs
+  const J = who.jacket;
+  const body = new Path2D();
+  body.moveTo(x - h * 0.125, y - h * 0.47);
+  body.lineTo(x - h * 0.14, y - h * 0.74); body.quadraticCurveTo(x - h * 0.15, y - h * 0.81, x - h * 0.07, y - h * 0.83);
+  body.lineTo(x + h * 0.07, y - h * 0.83); body.quadraticCurveTo(x + h * 0.15, y - h * 0.81, x + h * 0.14, y - h * 0.74);
+  body.lineTo(x + h * 0.125, y - h * 0.47); body.closePath();
+  fill(shade(J, 0.72), body);
+  for (const k of [-1, 1]) {
+    const hx = x + k * (h * 0.19 + k * sw * h * 0.02), hy = y - h * 0.48 + k * sw * h * 0.015;
+    const arm = new Path2D();
+    arm.moveTo(x + k * h * 0.1, y - h * 0.8); arm.quadraticCurveTo(x + k * h * 0.17, y - h * 0.79, x + k * h * 0.19, y - h * 0.7);
+    arm.lineTo(hx + k * h * 0.028, hy); arm.lineTo(hx - k * h * 0.026, hy + h * 0.004); arm.lineTo(x + k * h * 0.12, y - h * 0.66); arm.closePath();
+    fill(k < 0 ? rim(shade(J, 0.8)) : shade(J, 0.62), arm);
+    const hand = new Path2D(); hand.arc(hx, hy + h * 0.012, h * 0.026, 0, Math.PI * 2); fill(GLOVE, hand);
+  }
+  // the head: hair, a hat with a folded brim, sometimes a pompom or a ponytail
+  const hy = y - h * 0.915, hr = h * 0.066;
+  const head = new Path2D(); head.ellipse(x, hy, hr * 0.95, hr, 0, 0, Math.PI * 2);
+  fill(who.hair || [52, 40, 32], head);
+  if (who.tail) { const t = new Path2D(); t.ellipse(x + h * 0.012, hy + hr * 1.05, hr * 0.32, hr * 0.62, 0.15, 0, Math.PI * 2); fill(who.hair, t); }
+  if (who.hat) {
+    const hat = new Path2D(); hat.ellipse(x, hy - hr * 0.1, hr * 1.02, hr * 0.98, 0, Math.PI, Math.PI * 2); hat.lineTo(x + hr * 1.02, hy + hr * 0.2); hat.lineTo(x - hr * 1.02, hy + hr * 0.2); hat.closePath();
+    fill(who.hat, hat);
+    const brim = new Path2D(); brim.roundRect(x - hr * 1.05, hy - hr * 0.08, hr * 2.1, hr * 0.34, hr * 0.14); fill(shade(who.hat, 0.84), brim);
+    if (who.pom) { const pom = new Path2D(); pom.arc(x, hy - hr * 1.12, hr * 0.34, 0, Math.PI * 2); fill(who.hat, pom); }
+  }
+  const lit = new Path2D(); lit.ellipse(x - hr * 0.55, hy - hr * 0.2, hr * 0.3, hr * 0.72, 0.2, 0, Math.PI * 2);
+  g.save(); g.clip(head); fill(rim(who.hat || who.hair || [52, 40, 32]), lit); g.restore();
+  // the pack: a lid, a front pocket, a hip belt; a rolled mat strapped under the big ones
+  const P = who.pack, top = y - h * (who.big ? 0.865 : 0.8), bot = y - h * (who.big ? 0.53 : 0.58), pw = h * (who.big ? 0.3 : 0.24);
+  const belt = new Path2D(); belt.roundRect(x - h * 0.155, y - h * 0.56, h * 0.31, h * 0.034, h * 0.012); if (who.big) fill(shade(P, 0.45), belt);
+  const pack = new Path2D(); pack.roundRect(x - pw / 2, top, pw, bot - top, h * 0.05); fill(shade(P, 0.8), pack);
+  const edge = new Path2D(); edge.roundRect(x - pw / 2, top, pw * 0.14, bot - top, [h * 0.05, 0, 0, h * 0.05]); fill(rim(shade(P, 0.8)), edge);
+  const lid = new Path2D(); lid.roundRect(x - pw / 2 - h * 0.004, top, pw + h * 0.008, (bot - top) * 0.24, [h * 0.05, h * 0.05, h * 0.02, h * 0.02]); fill(shade(P, 0.64), lid);
+  const pocket = new Path2D(); pocket.roundRect(x - pw * 0.3, top + (bot - top) * 0.52, pw * 0.6, (bot - top) * 0.38, h * 0.03); fill(shade(P, 0.68), pocket);
+  g.strokeStyle = col(shade(P, 0.5)); g.lineWidth = Math.max(0.6, h * 0.008); g.lineCap = 'butt';
+  g.beginPath(); for (const k of [-1, 1]) { g.moveTo(x + k * pw * 0.36, top + (bot - top) * 0.3); g.lineTo(x + k * pw * 0.36, bot - h * 0.02); } g.stroke();
+  if (who.big && who.pad) {
+    const pad = new Path2D(); pad.roundRect(x - pw * 0.55, bot - h * 0.012, pw * 1.1, h * 0.066, h * 0.033); fill(shade(who.pad, 0.86), pad);
+    const padLit = new Path2D(); padLit.roundRect(x - pw * 0.55, bot - h * 0.012, pw * 0.3, h * 0.066, [h * 0.033, 0, 0, h * 0.033]); fill(rim(who.pad), padLit);
+  }
 }
 
 function draw(p) {
@@ -288,6 +377,7 @@ function draw(p) {
   const hikersAt = [];
   // the group keeps nearly our pace while the title is up, then walks on at its own and we rise over them
   const walked = 0.8 * (camS(Math.min(p, 0.035)) - S0) + 60 * p;
+  const tone = Object.assign(toPaper, { fade });
   for (const hk of HIKERS) {
     const sh = hk.s + walked, c = along(sh), c2 = along(sh + 4);
     const dx = c2[0] - c[0], dz = c2[1] - c[1], dl = Math.hypot(dx, dz) || 1;
@@ -295,8 +385,10 @@ function draw(p) {
     const vx = x - cam.x, vz = z - cam.z, zc = vx * cam.hx + vz * cam.hz;
     if (zc < 1.2) continue;
     hikersAt.push({ dist: zc, x: cx + f * (vx * rx + vz * rz) / zc, y: horizon - f * (ground(x, z) - cam.y) / zc, h: f * 1.72 / zc,
-      pack: toPaper(hk.pack ? ROPE : [38, 48, 44]), body: toPaper([20, 28, 26]), stride: Math.sin((sh + hk.s) * 1.3) * f * 0.05 / zc, drawn: false });
+      who: hk, ph: sh * (Math.PI * 2 / 1.5) + hk.step, drawn: false });
   }
+  hikersAt.sort((a, b) => b.dist - a.dist);   // far to near
+  const drawHiker = (hk) => { hiker(g, hk.x, hk.y, hk.h, hk.who, hk.ph, tone); hk.drawn = true; };
 
   // sky, with the sun just up behind the fells to the left of the valley
   const sky = g.createLinearGradient(0, 0, 0, Math.max(1, horizon));
@@ -404,7 +496,7 @@ function draw(p) {
     if (!heroDrawn && ly.dist < heroDist && morph <= 0) { drawHero(); heroDrawn = true; }
     // the trail and the group on it, at their depth
     drawTrail(trail.filter((t) => !t.drawn && ly.dist < t.dist));
-    for (const hk of hikersAt) if (!hk.drawn && ly.dist < hk.dist) { hiker(g, hk.x, hk.y, hk.h, hk.pack, hk.body, hk.stride); hk.drawn = true; }
+    for (const hk of hikersAt) if (!hk.drawn && ly.dist < hk.dist) drawHiker(hk);
 
     // trees on this layer's forest, where they are more than a few pixels tall
     if (ly.dist < 1100) {
@@ -446,7 +538,7 @@ function draw(p) {
     else if (ly.dist > 60) { g.strokeStyle = rgb(mix3(C_FLOOR, PAPER, 0.35 + 0.4 * air), 0.16 * ly.a); g.lineWidth = 0.6; g.stroke(edge); }
   }
   drawTrail(trail.filter((t) => !t.drawn));
-  for (const hk of hikersAt) if (!hk.drawn) hiker(g, hk.x, hk.y, hk.h, hk.pack, hk.body, hk.stride);
+  for (const hk of hikersAt) if (!hk.drawn) drawHiker(hk);
 
   // morning light falling through the trees, while we are among them
   const beams = (1 - sstep(0.1, 0.28, p)) * 0.09;
@@ -481,34 +573,34 @@ function overlay(p) {
 }
 
 // ---------------------------------------------------------------- loop
-let pShown = DEBUG_P ?? 0, target = 0, last = performance.now(), raf = 0, running = false, visible = true, drawn = -1;
+let pShown = 0, target = 0, last = performance.now(), raf = 0, running = false, visible = true, drawn = -1;
 
 function scrollProgress() {
   const span = (section.offsetHeight - innerHeight) * 0.96;     // complete while the stage is still pinned
   return span > 0 ? clamp(-section.getBoundingClientRect().top / span) : 0;
 }
 
-// The end: the stage stays exactly where it is on screen and becomes the first screen of the page,
-// and the scroll length it used is removed in the same frame (no smooth scrolling, or the page would
-// show far down and then glide back up). Scrolling up later is just the page.
-function finish(toTop) {
-  if (done || DEBUG_P != null) return;
-  done = true;
-  const extra = section.offsetHeight - stage.offsetHeight;
-  const y = toTop ? 0 : Math.max(0, scrollY - extra);
-  markDone();
-  scrollTo({ top: y, behavior: 'instant' });
-  cancelAnimationFrame(raf);
-  canvas.remove();
+// Jumps (Skip, Replay, the Home and End keys) cut to the new place instead of flying the whole way there.
+function jump(y) { scrollTo({ top: y, behavior: 'instant' }); target = pShown = scrollProgress(); drawn = -1; request(); }
+let ended = false;
+function state() {
+  const end = !visible || target > 0.97;
+  if (end !== ended) {
+    ended = end;
+    root.classList.toggle('intro-complete', end);                   // the site's nav comes back on the title card
+    stage.classList.toggle('is-end', end);
+    if (end) try { sessionStorage.setItem('hc-intro', 'seen'); } catch (e) { /* private mode */ }
+  }
 }
 
 function frame(now) {
   running = false;
-  if (!visible || done) return;
-  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (!visible) return;
+  const dt = Math.min(Math.max(now - last, 0) / 1000, 0.1); last = now;
   target = DEBUG_P ?? scrollProgress();
-  pShown = DEBUG_P != null ? target : pShown + (target - pShown) * (1 - Math.exp(-dt * 5));
-  if (target >= 1 && pShown > 0.994) { finish(false); return; }
+  pShown = DEBUG_P != null || Math.abs(target - pShown) > 0.25 ? target : pShown + (target - pShown) * (1 - Math.exp(-dt * 5));
+  if (Math.abs(target - pShown) < 2e-4) pShown = target;
+  state();
   if (Math.abs(pShown - drawn) > 1e-5) {
     const t0 = performance.now();
     resize();
@@ -519,17 +611,21 @@ function frame(now) {
   }
   if (Math.abs(target - pShown) > 1e-5) request();
 }
-function request() { if (!running && !done) { running = true; raf = requestAnimationFrame(frame); } }
+function request() { if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(frame); } }
 
 root.classList.add('has-webgl');
+target = pShown = DEBUG_P ?? scrollProgress();
+state();
 overlay(pShown);
 HC.terrain(canvas.dataset.src).then((t) => { T = t; drawn = -1; request(); });
 addEventListener('scroll', request, { passive: true });
 addEventListener('resize', () => { drawn = -1; request(); });
 new IntersectionObserver(([e]) => {
   visible = e.isIntersecting;
-  if (visible) request(); else if (target >= 1 || scrollProgress() >= 1) finish(false);
+  state();
+  if (visible) request();
 }).observe(section);
-section.querySelector('.intro-skip')?.addEventListener('click', (e) => { e.preventDefault(); finish(true); section.querySelector('.intro-end')?.focus?.(); });
+section.querySelector('.intro-skip')?.addEventListener('click', (e) => { e.preventDefault(); jump(endY()); section.querySelector('.intro-end')?.focus?.({ preventScroll: true }); });
+section.querySelector('.intro-end-replay')?.addEventListener('click', (e) => { e.preventDefault(); jump(0); });
 request();
 })();

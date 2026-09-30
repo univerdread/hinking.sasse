@@ -69,7 +69,7 @@ class Relief {
     this.visible = false; this.dirty = true; this.last = '';
     const gl = this.gl = c.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: true });
     if (!gl) { this.fig.classList.add('no-webgl'); return; }
-    HC.terrain(c.dataset.src).then((t) => this.build(t));
+    HC.near(c, () => HC.terrain(c.dataset.src).then((t) => this.build(t)));
     new IntersectionObserver(([e]) => { this.visible = e.isIntersecting; if (this.visible) HC.wake(); }, { rootMargin: '20% 0px' }).observe(c);
     new ResizeObserver(() => { this.dirty = true; HC.wake(); }).observe(c);
     if (!coarse) addEventListener('pointermove', (e) => {
@@ -232,7 +232,7 @@ class Tour {
     this.pointer = [0, 0]; this.pt = [0, 0];
     const gl = this.gl = c.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: true });
     if (!gl) { this.fig.classList.add('no-webgl'); return; }
-    Promise.all(this.places.map((pl) => HC.terrain(pl.src))).then((ts) => this.build(ts));
+    HC.near(c, () => Promise.all(this.places.map((pl) => HC.terrain(pl.src))).then((ts) => this.build(ts)));
     new IntersectionObserver(([e]) => { this.visible = e.isIntersecting; if (this.visible) HC.wake(); }, { rootMargin: '20% 0px' }).observe(c);
     new ResizeObserver(() => { this.last = ''; HC.wake(); }).observe(c);
     if (!coarse) addEventListener('pointermove', (e) => { if (this.visible) { this.pt = [(e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1]; HC.wake(); } }, { passive: true });
