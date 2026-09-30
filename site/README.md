@@ -14,6 +14,8 @@ site/assets/css/site.css     the design system
 site/assets/js/site.js       the motion system: one rAF loop, scene progress (--p), parallax, maps, rope
 site/assets/js/intro.js      the opening (home only): the Abisko valley as layered vector terrain, reversible
 site/assets/js/intro-ascent.js  the earlier raymarched version, only loaded with ?scene=ascent
+site/assets/js/intro-real.js  experiment (branch experiment/photoreal): the flight in 3D (three.js), only with ?scene=real
+site/assets/js/vendor/three.min.js  three.js r186 (MIT), bundled and minified; used only by intro-real.js
 site/assets/js/relief.js     the terrain objects: the destinations model (home) and a trip's block with its route
 site/assets/js/contours.js   live contour layers: marching squares over the heightmaps, flowing with scroll
 ```
@@ -59,6 +61,18 @@ say what the club is. At the end the colour drains out of the layers until only 
 contour drawing on paper, and the twin peak at the end of the valley becomes the mark on the title card.
 *Skip intro* and *Replay the intro* cut to the end or the start. `?p=0.4` freezes the camera. `?scene=ascent` plays the earlier, raymarched 3D
 version (`intro-ascent.js`), kept for comparison.
+
+## The 3D experiment (`?scene=real`)
+
+The same flight, timing, captions and ending, rendered in 3D: the Abisko elevation model as a CDLOD
+terrain with detail below its cells, mountains beyond it and a valley to the club's mountain; spruce and
+mountain birch as geometry near the camera and as baked pictures further off (placed once, in a worker,
+by the same rule); ground cover, the group of six walking, geese; a low October sun with traced mountain
+shadows, tree shadows, light through the leaves and light shafts; mist and haze; ACES tone mapping and a
+grade. The mountain at the end has the mark's outline, and a flat copy of it becomes the title card's
+logo. Adaptive resolution keeps it near 60 fps; `?p=0.4` freezes it, `?hide=near,rings,terrain,cover,shafts`
+leaves parts out for measuring. Delete `intro-real.js`, `vendor/` and the three lines in `intro.js` that
+load it to remove the experiment.
 
 ## Motion language
 

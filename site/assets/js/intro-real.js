@@ -21,6 +21,7 @@ const canvas = section.querySelector('canvas');
 const root = document.documentElement;
 const params = new URLSearchParams(location.search);
 const DEBUG_P = params.has('p') ? parseFloat(params.get('p')) : null;
+const HIDE = (params.get('hide') || '').split(',');   // for the tuning scripts
 const coarse = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
@@ -56,7 +57,13 @@ function noise(x, z) {
   const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
   return mix(mix(hash2(i, j), hash2(i + 1, j), u), mix(hash2(i, j + 1), hash2(i + 1, j + 1), u), v);
 }
-const ridges = (x, z) => 620 + 760 * (noise(x / 3100, z / 3100) * 0.65 + noise(x / 1300 + 7, z / 1300 + 3) * 0.35);
+// beyond the model: fells and ridged mountains (to ~1,800 m, snow on the tops), and a valley floor at 600 m
+// that leads from the end of the flight to the mountain that is the mark
+const ridges = (x, z) => {
+  const r = 1 - Math.abs(2 * noise(x / 5200, z / 5200) - 1);
+  const h = 560 + 1250 * (r ** 1.6 * 0.6 + noise(x / 1900 + 7, z / 1900 + 3) * 0.3 + noise(x / 700 + 2, z / 700 + 9) * 0.1);
+  return mix(600, h, corridor(x, z));
+};
 const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
 function mapHeight(x, z) {
   if (!T) return 400;
@@ -99,6 +106,11 @@ function distToPath(x, z) {
   }
   return d;
 }
+const CORR = [...along(LEN), ...along(LEN * 1.1 + 9200 + 2500)];
+const corridor = (x, z) => {
+  const vx = CORR[2] - CORR[0], vz = CORR[3] - CORR[1], t = clamp(((x - CORR[0]) * vx + (z - CORR[1]) * vz) / (vx * vx + vz * vz));
+  return sstep(1800, 4600, Math.hypot(x - CORR[0] - vx * t, z - CORR[1] - vz * t));
+};
 const S0 = 180, camS = (p) => S0 + (LEN * 1.1 - S0) * smooth(clamp(p / 0.93)) ** 1.05;
 function flight(p) {
   const s = camS(p), c = along(s), ahead = along(s + 260);
@@ -122,12 +134,13 @@ function forestAt(x, z, mh) {
   return d;
 }
 const birchShare = (mh) => 0.14 + 0.36 * sstep(430, 590, mh) + 0.3 * sstep(14, 3, mh - WATER);
-function treeAt(i, j) {
-  const x = (i + 0.1 + 0.8 * hash2(i * 3 + 1, j * 7 + 2)) * CELL, z = (j + 0.1 + 0.8 * hash2(i * 5 + 3, j * 11 + 4)) * CELL;
+function treeAt(i, j, cs = CELL, salt = 0) {
+  const a = salt * 7717, b = salt * 3571;
+  const x = (i + 0.1 + 0.8 * hash2(i * 3 + 1 + a, j * 7 + 2 + b)) * cs, z = (j + 0.1 + 0.8 * hash2(i * 5 + 3 + a, j * 11 + 4 + b)) * cs;
   const mh = mapHeight(x, z);
-  if (!(hash2(i + 7919, j + 104729) < forestAt(x, z, mh) * 0.9)) return null;
-  const tl = treeline(x, z), birch = hash2(i + 31, j + 57) < birchShare(mh);
-  const vr = hash2(i + 97, j + 13), sr = hash2(i + 211, j + 89), rr = hash2(i + 401, j + 17);
+  if (!(hash2(i + 7919 + a, j + 104729 + b) < forestAt(x, z, mh) * 0.9)) return null;
+  const tl = treeline(x, z), birch = hash2(i + 31 + a, j + 57 + b) < birchShare(mh);
+  const vr = hash2(i + 97 + a, j + 13 + b), sr = hash2(i + 211 + a, j + 89 + b), rr = hash2(i + 401 + a, j + 17 + b);
   const up = sstep(tl + 10, tl - 170, mh);
   return {
     x, z, y: groundFrom(x, z, mh) - 0.15, rot: rr * Math.PI * 2,
@@ -165,6 +178,19 @@ uniform float uHMin, uHMax, uWater;
 float cr(float p0, float p1, float p2, float p3, float t) { return p1 + 0.5 * t * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0))); }
 float crd(float p0, float p1, float p2, float p3, float t) { return 0.5 * (p2 - p0 + 2.0 * t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) + 3.0 * t * t * (3.0 * (p1 - p2) + p3 - p0)); }
 float H(int x, int y) { return texelFetch(uHeight, ivec2(x, y), 0).r; }
+uniform vec4 uCorr;
+vec3 ridgesD(vec2 xz) {
+  vec3 a = vnoised(xz / 5200.0);
+  float s2 = 2.0 * a.x - 1.0, r = max(1.0 - abs(s2), 1e-5);
+  vec2 dr = -sign(s2) * 2.0 * a.yz / 5200.0;
+  float rp = pow(r, 1.6); vec2 drp = 1.6 * pow(r, 0.6) * dr;
+  vec3 b = vnoised(xz / 1900.0 + vec2(7.0, 3.0)), c = vnoised(xz / 700.0 + vec2(2.0, 9.0));
+  float h = 560.0 + 1250.0 * (rp * 0.6 + b.x * 0.3 + c.x * 0.1);
+  vec2 g = 1250.0 * (drp * 0.6 + b.yz * (0.3 / 1900.0) + c.yz * (0.1 / 700.0));
+  vec2 A = uCorr.xy, V = uCorr.zw - uCorr.xy; float q = clamp(dot(xz - A, V) / dot(V, V), 0.0, 1.0);
+  float v = sst(1800.0, 4600.0, length(xz - A - V * q));
+  return vec3(mix(600.0, h, v), g * v);
+}
 // the model, bicubic, with its gradient (per metre)
 vec3 mapHeight(vec2 xz) {
   vec2 g = xz / uMapSize * (uRes - 1.0);
@@ -184,9 +210,7 @@ vec3 mapHeight(vec2 xz) {
                 crd(r[0], r[1], r[2], r[3], f.y) * span / cell.y);
   if (out_ > 0.0) {
     float t = sst(0.0, 2200.0, out_);
-    vec3 a = vnoised(xz / 3100.0), b = vnoised(xz / 1300.0 + vec2(7.0, 3.0));
-    vec3 rg = vec3(620.0 + 760.0 * (a.x * 0.65 + b.x * 0.35), 760.0 * (a.yz * 0.65 / 3100.0 + b.yz * 0.35 / 1300.0));
-    m = mix(m, rg, t);
+    m = mix(m, ridgesD(xz), t);
   }
   return m;
 }
@@ -200,6 +224,16 @@ vec3 groundFrom(vec2 xz, vec3 m) {
   return h.x <= uWater ? vec3(uWater, 0.0, 0.0) : h;
 }
 vec3 groundH(vec2 xz) { return groundFrom(xz, mapHeight(xz)); }
+vec3 groundLod(vec2 xz, float sp) {
+  vec3 m = mapHeight(xz);
+  vec3 n1 = vnoised(xz / 240.0 + vec2(3.0, 0.0)), n2 = vnoised(xz / 38.0), n3 = vnoised(xz / 7.0 + vec2(0.0, 11.0)), n4 = vnoised(xz / 1.9 + vec2(5.0, 0.0));
+  float a1 = 1.0 - smoothstep(90.0, 260.0, sp), a2 = 1.0 - smoothstep(15.0, 45.0, sp), a3 = 1.0 - smoothstep(3.0, 9.0, sp), a4 = 1.0 - smoothstep(0.8, 2.5, sp);
+  vec3 d = vec3(6.0 * (n1.x - 0.5) * a1 + 2.5 * (n2.x - 0.5) * a2 + 0.6 * (n3.x - 0.5) * a3 + 0.18 * (n4.x - 0.5) * a4,
+                6.0 * n1.yz / 240.0 * a1 + 2.5 * n2.yz / 38.0 * a2 + 0.6 * n3.yz / 7.0 * a3 + 0.18 * n4.yz / 1.9 * a4);
+  float s = sst(uWater, uWater + 10.0, m.x);
+  vec3 h = vec3(m.x + d.x * s, m.yz + d.yz * s);
+  return h.x <= uWater ? vec3(uWater, 0.0, 0.0) : h;
+}
 // the mountains' shadows, traced once over the model (1 = in the sun)
 float sunVis(vec2 xz) { vec2 uv = xz / uMapSize; return (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) ? 1.0 : texture(uSunVis, uv).r; }
 `;
@@ -240,6 +274,7 @@ const AIR = /* glsl */`
 uniform vec3 uSunDir, uCamPos;
 uniform float uMist;
 vec3 skyColor(vec3 d);
+vec3 hazeTowards(vec3 wp) { vec3 dir = normalize(wp - uCamPos); float s = pow(max(dot(dir, uSunDir), 0.0), 6.0); return mix(skyColor(normalize(vec3(dir.x, 0.02, dir.z))) * 0.92, vec3(1.9, 1.55, 1.05), s * 0.5); }
 vec3 air(vec3 col, vec3 wp) {
   vec3 v = wp - uCamPos; float dist = length(v); vec3 dir = v / max(dist, 1e-3);
   float b = 1.0 / 90.0, base = ${WATER.toFixed(1)};
@@ -262,16 +297,17 @@ vec3 skyColor(vec3 d) {
   return c;
 }
 `;
-// the second target: how much of the picture (not paper) is here
-const MASK = 'layout(location = 1) out highp vec4 gMask;\n';
+// the picture's alpha says how much of it (not paper) is here: 1 until the ending. Where the trees'
+// alpha is their coverage (alpha to coverage) it is also scaled by what is left of them, so they dissolve.
+const MASK = '';
 
 // ---------------------------------------------------------------- renderer, camera, targets
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(52, 1, 0.25, 90000);
-const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4, count: 2 });
+const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: +(params.get('msaa') ?? 4) });
 
 const uniforms = {
   uHeight: { value: null }, uSunVis: { value: null }, uMapSize: { value: new THREE.Vector2(WM, HM) }, uRes: { value: new THREE.Vector2(384, 384) },
@@ -279,7 +315,9 @@ const uniforms = {
   uSunDir: { value: SUN }, uCamPos: { value: new THREE.Vector3() }, uMist: { value: 1 },
   uFade: { value: 0 }, uLines: { value: 0 }, uTime: { value: 0 },
   uPath: { value: PATH.map(([x, z]) => new THREE.Vector2(x, z)) },
+  uCorr: { value: new THREE.Vector4(...CORR) },
   uNearR: { value: coarse ? 110 : 150 },
+  uForest: { value: Object.assign(new THREE.DataTexture(new Uint8Array(1), 1, 1, THREE.RedFormat), { needsUpdate: true }) }, uForestBox: { value: new THREE.Vector4(0, 0, 1, 1) },
 };
 
 // ---------------------------------------------------------------- the sky dome
@@ -287,7 +325,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(80000, 48, 24), new THREE.Sh
   uniforms, side: THREE.BackSide, depthWrite: false, depthTest: false,
   vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w * 0.999999; }',
   fragmentShader: `${MASK} uniform vec3 uSunDir; uniform float uFade; varying vec3 vDir; ${SKY}
-    void main() { gl_FragColor = vec4(skyColor(normalize(vDir)), 1.0); gMask = vec4(1.0 - uFade); }`,
+    void main() { gl_FragColor = vec4(skyColor(normalize(vDir)), 1.0 - uFade); }`,
 }));
 sky.renderOrder = -10; sky.frustumCulled = false;
 scene.add(sky);
@@ -303,8 +341,25 @@ scene.add(sunLight, sunLight.target);
 const hemi = new THREE.HemisphereLight(lin(165, 185, 205), lin(56, 62, 44), 1.1);
 scene.add(hemi);
 
+// four octaves of tiling value noise in one texture (8, 16, 32 and 64 cells across): one fetch, four scales
+function noiseTexture() {
+  const N = 256, data = new Uint8Array(N * N * 4);
+  [8, 16, 32, 64].forEach((L, ch) => {
+    const v = (i, j) => hash2(((i % L) + L) % L + ch * 1013, ((j % L) + L) % L + ch * 3079);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const fx = x / N * L, fy = y / N * L, i = Math.floor(fx), j = Math.floor(fy), u = smooth(fx - i), w = smooth(fy - j);
+      data[(y * N + x) * 4 + ch] = Math.round(255 * mix(mix(v(i, j), v(i + 1, j), u), mix(v(i, j + 1), v(i + 1, j + 1), u), w));
+    }
+  });
+  const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.anisotropy = 8; t.needsUpdate = true;
+  return t;
+}
+uniforms.uNoise = { value: noiseTexture() };
+
 // the same additions to every lit material: mountain shadows, light through leaves, the air, the mask
-const LIT_FRAG_HEAD = `${MASK}uniform float uFade, uLines, uTime, uTrans, uNearR;\nvarying vec3 vW;\n${NOISE}${LAND}${AIR}${SKY}`;
+const LIT_FRAG_HEAD = `${MASK}uniform float uFade, uLines, uTime, uTrans, uNearR;\nuniform sampler2D uNoise;\nvarying vec3 vW;\n${NOISE}${LAND}${AIR}${SKY}`;
 const LIT_AFTER_LIGHTS = /* glsl */`#include <lights_fragment_begin>
   {
     float tv = sunVis(vW.xz);
@@ -313,13 +368,12 @@ const LIT_AFTER_LIGHTS = /* glsl */`#include <lights_fragment_begin>
     reflectedLight.directDiffuse += diffuseColor.rgb * directLight.color * tv * back * uTrans;
   }`;
 const LIT_END = /* glsl */`
-  gl_FragColor.rgb = air(gl_FragColor.rgb, vW);
-  gMask = vec4(1.0 - uFade);`;
+  gl_FragColor.rgb = air(gl_FragColor.rgb, vW);`;
 // a screen-space dither for the hand-over between trees and their pictures
 const DITHER = 'float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }\n';
 
 // ---------------------------------------------------------------- the terrain (CDLOD)
-const GRID = coarse ? 32 : 48;          // quads per patch side
+const GRID = coarse ? 28 : 40;          // quads per patch side
 const LEAF = 16;                        // metres, the finest patch
 const LEVELS = 12;                      // up to 16 × 2^12 = 65.5 km
 const RANGE = Array.from({ length: LEVELS + 1 }, (_, l) => LEAF * 2 ** l * 2.2);
@@ -348,55 +402,83 @@ terrainMat.onBeforeCompile = (sh) => {
   vec2 mr = uMorph[lvl];
   float mk = clamp((distance(vec3(wxz.x, groundH(wxz).x, wxz.y), uCamPos) - mr.x) / (mr.y - mr.x), 0.0, 1.0);
   wxz -= fract(gp * uGrid * 0.5) * 2.0 / uGrid * aNode.z * mk;
-  vec3 gh = groundH(wxz);
+  vec3 gh = groundLod(wxz, aNode.z / uGrid * (1.0 + mk));
   vec3 objectNormal = normalize(vec3(-gh.y, 1.0, -gh.z));`)
     .replace('#include <begin_vertex>', 'vec3 transformed = vec3(wxz.x, gh.x, wxz.y); vW = transformed; vGrad = gh.yz;');
-  sh.fragmentShader = LIT_FRAG_HEAD + FOREST + 'varying vec2 vGrad;\n' + sh.fragmentShader
+  sh.fragmentShader = LIT_FRAG_HEAD + FOREST + 'varying vec2 vGrad;\nuniform sampler2D uForest;\nuniform vec4 uForestBox;\n' + sh.fragmentShader
     .replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
   // what grows here: forest floor below the treeline, autumn heath above, rock where it is steep, snow high up
   float hgt = vW.y, dist = distance(vW, uCamPos);
   vec3 nW = normalize(vec3(-vGrad.x, 1.0, -vGrad.y));
   float slope = 1.0 - nW.y;
-  float n1 = vnoise(vW.xz / 60.0) * 0.6 + vnoise(vW.xz / 23.0) * 0.4;
-  float n2 = vnoise(vW.xz / 7.0 + 3.1) * 0.6 + vnoise(vW.xz / 2.6) * 0.4;
-  float n3 = vnoise(vW.xz / 0.9) * (1.0 - smoothstep(30.0, 120.0, dist)) + 0.5 * smoothstep(30.0, 120.0, dist);
-  float mh = mapHeight(vW.xz).x;
+  vec4 nA = texture(uNoise, vW.xz / 480.0), nB = texture(uNoise, vW.xz / 56.0), nC = texture(uNoise, vW.xz / 7200.0);
+  float n1 = nA.r * 0.6 + nA.g * 0.4;                       // 60 m and 30 m
+  float n2 = nB.r * 0.6 + nB.b * 0.4;                       // 7 m and 1.8 m
+  float n3 = mix(texture(uNoise, vW.xz / 7.2).b, 0.5, smoothstep(30.0, 120.0, dist));   // 0.9 m, near only
+  float mh = hgt;
   float tl = treeline(vW.xz);
-  float sl = 960.0 + 140.0 * (vnoise(vW.xz / 900.0 + vec2(5.0, 0.0)) - 0.5);
-  vec3 floorC = mix(${glsl(lin(40, 54, 32))}, ${glsl(lin(74, 70, 40))}, smoothstep(0.35, 0.75, n2));
-  floorC = mix(floorC, ${glsl(lin(104, 52, 34))}, smoothstep(0.6, 0.8, n1) * 0.55);          // blueberry turned red
-  floorC = mix(floorC, ${glsl(lin(150, 150, 128))}, smoothstep(0.72, 0.9, n2) * 0.45);        // reindeer lichen
-  vec3 heath = mix(${glsl(lin(140, 118, 64))}, ${glsl(lin(112, 72, 42))}, smoothstep(0.3, 0.7, n2));
-  heath = mix(heath, ${glsl(lin(168, 164, 142))}, smoothstep(0.64, 0.8, n1) * 0.55);         // lichen
-  vec3 rock = mix(${glsl(lin(96, 98, 96))}, ${glsl(lin(58, 62, 64))}, n2) * (0.8 + 0.4 * n3);
-  vec3 c = mix(floorC, heath, smoothstep(tl - 40.0, tl + 60.0, hgt + (n1 - 0.5) * 80.0));
+  float sl = 960.0 + 140.0 * (nC.r - 0.5);
+  vec4 hA = texture(uNoise, vW.xz / 320.0), hB = texture(uNoise, vW.xz / 40.0);   // 40, 20, 10, 5 m and 5 … 0.6 m
+  // the forest floor: moss and needles, blueberry turned red, pale reindeer lichen
+  vec3 floorC = mix(${glsl(lin(40, 54, 32))}, ${glsl(lin(76, 66, 42))}, smoothstep(0.35, 0.75, n2));
+  floorC = mix(floorC, ${glsl(lin(112, 48, 32))}, smoothstep(0.6, 0.8, n1) * 0.55);
+  floorC = mix(floorC, ${glsl(lin(150, 150, 128))}, smoothstep(0.72, 0.9, n2) * 0.45);
+  // the heath: dwarf birch gone red, crowberry, yellow grass, pale lichen, in patches of every size
+  vec3 heath = mix(${glsl(lin(156, 132, 74))}, ${glsl(lin(64, 58, 40))}, smoothstep(0.38, 0.66, hA.g * 0.7 + hB.r * 0.3));
+  heath = mix(heath, ${glsl(lin(150, 68, 36))}, smoothstep(0.55, 0.74, hA.b * 0.6 + hB.g * 0.4) * 0.85);
+  heath = mix(heath, ${glsl(lin(180, 176, 150))}, smoothstep(0.66, 0.84, hB.b * 0.5 + hA.a * 0.5) * 0.7);
+  // bogs in the flat hollows: sedge gone orange, black water between the tussocks
+  float flatG = 1.0 - smoothstep(0.015, 0.06, slope);
+  float bog = flatG * smoothstep(0.56, 0.7, hA.r) * (1.0 - smoothstep(tl + 80.0, tl + 200.0, hgt));
+  heath = mix(heath, mix(${glsl(lin(164, 118, 62))}, ${glsl(lin(34, 40, 38))}, smoothstep(0.6, 0.7, hB.a)), bog);
+  float fo = texture(uForest, (vW.xz - uForestBox.xy) / uForestBox.zw).r;
+  vec3 c = mix(heath, floorC, smoothstep(0.02, 0.3, fo + (n1 - 0.5) * 0.12) * (1.0 - smoothstep(tl + 30.0, tl + 90.0, hgt)));
   // under and beyond the trees: the canopy, where the pictures of the trees give out
-  float fo = forestAt(vW.xz, mh);
   c = mix(c, c * 0.55, fo * (1.0 - smoothstep(60.0, 20.0, dist)) * 0.6);
   c = mix(c, ${glsl(lin(20, 34, 26))}, fo * smoothstep(2600.0, 3600.0, dist) * 0.85);
+  // rock: steep ground, and outcrops and boulders on the gentle ground too
+  float outcrop = smoothstep(0.76, 0.86, hA.a * 0.55 + hA.b * 0.45) * (1.0 - bog);
+  vec3 rock = mix(${glsl(lin(104, 104, 98))}, ${glsl(lin(58, 62, 64))}, hB.g) * (0.8 + 0.4 * n3);
+  rock = mix(rock, ${glsl(lin(160, 158, 136))}, smoothstep(0.6, 0.8, hB.r) * 0.4);       // lichen on the stone
+  c = mix(c, rock, outcrop * 0.85);
   c = mix(c, rock, smoothstep(0.34, 0.52, slope + (n2 - 0.5) * 0.2));
   float snow = smoothstep(sl - 30.0, sl + 50.0, hgt + (n1 - 0.5) * 160.0) * (1.0 - smoothstep(0.45, 0.65, slope));
   c = mix(c, ${glsl(lin(236, 238, 240))}, snow);
-  c *= 0.82 + 0.36 * n3;
+  c *= (0.8 + 0.4 * n3) * (0.8 + 0.4 * hB.r);        // small-scale light and dark
+  c *= 0.86 + 0.28 * smoothstep(0.2, 0.8, hA.r);       // and in broad patches
   // the trail: packed earth and stones, worn into the floor
-  float pd = pathDist(vW.xz) + 0.35 * (vnoise(vW.xz / 4.0) - 0.5);
+  float pd = pathDist(vW.xz) + 0.35 * (nB.g - 0.5);
   float trail = (1.0 - smoothstep(0.55, 0.95, pd)) * (1.0 - smoothstep(4000.0, 6000.0, dist));
   c = mix(c, ${glsl(lin(104, 92, 72))} * (0.75 + 0.5 * n3), trail);
   float wet = step(hgt, uWater + 0.02);
   c = mix(c, ${glsl(lin(34, 46, 50))}, wet);
   diffuseColor.rgb = c;`)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor = mix(mix(0.95, 0.5, snow), 0.06, wet);`)
+  roughnessFactor = mix(mix(1.0, 0.6, snow), 0.06, wet);`)
     .replace('#include <normal_fragment_begin>', /* glsl */`#include <normal_fragment_begin>
-  {
+  vec3 nWorld = vec3(0.0, 1.0, 0.0);
+  if (dist >= 170.0 && wet < 0.5) {
+    vec2 u1 = vW.xz / 320.0; float e = 1.0 / 256.0;
+    float h0 = texture(uNoise, u1).r, hx = texture(uNoise, u1 + vec2(e, 0.0)).r, hz = texture(uNoise, u1 + vec2(0.0, e)).r;
+    vec2 g = vGrad + vec2(hx - h0, hz - h0) / (e * 320.0) * 14.0 * (1.0 - smoothstep(4000.0, 9000.0, dist));
+    nWorld = normalize(vec3(-g.x, 1.0, -g.y));
+    normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
+  }
+  if (dist < 170.0 || wet > 0.5) {
     // detail the model cannot hold: small bumps in the light, fading with distance
     vec3 a = vnoised(vW.xz / 2.3), b = vnoised(vW.xz / 0.6 + 7.0);
     vec2 g = vGrad + (a.yz / 2.3 * 0.55 + b.yz / 0.6 * 0.07) * (1.0 - smoothstep(20.0, 160.0, dist)) * (1.0 - wet);
     g += wet * vnoised(vW.xz / 3.0 + uTime * 0.2).yz * 0.03;
-    normal = normalize((viewMatrix * vec4(normalize(vec3(-g.x, 1.0, -g.y)), 0.0)).xyz);
+    nWorld = normalize(vec3(-g.x, 1.0, -g.y));
+    normal = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
   }`)
     .replace('#include <lights_fragment_begin>', LIT_AFTER_LIGHTS)
     .replace('#include <fog_fragment>', /* glsl */`
+  if (wet > 0.5) {
+    vec3 vd = normalize(vW - uCamPos), rd = reflect(vd, nWorld); rd.y = abs(rd.y);
+    float fr = 0.02 + 0.98 * pow(1.0 - max(dot(-vd, nWorld), 0.0), 5.0);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, skyColor(rd) * sunVis(vW.xz * 0.999), fr);
+  }
   gl_FragColor.rgb = air(gl_FragColor.rgb, vW);
   {
     // the ending: the colour drains to paper and the land is drawn by its contours every 20 m
@@ -404,7 +486,7 @@ terrainMat.onBeforeCompile = (sh) => {
     float line = 1.0 - smoothstep(0.0, w * 1.2, min(fract(lv), 1.0 - fract(lv)));
     line *= uLines * (1.0 - smoothstep(12000.0, 20000.0, dist));
     gl_FragColor.rgb = mix(gl_FragColor.rgb, ${glsl(INK)} * 2.0, uFade);
-    gMask = vec4(mix(1.0, line * 0.5, uFade));
+    gl_FragColor.a = mix(1.0, line * 0.5, uFade);
   }`);
 };
 const terrain = new THREE.Mesh(tGeo, terrainMat);
@@ -557,7 +639,7 @@ function builder() {
 }
 // a northern spruce: a narrow spire; whorls of branches that droop and shorten towards the top, each
 // branch two crossed sprays; normals point out of the crown so it is lit as a volume, not as cards
-function spruceGeometry(seed, whorls) {
+function spruceGeometry(seed, whorls, widen = 1) {
   const r = rng(seed), b = builder(), R0 = 0.19 + 0.04 * r();
   b.tube([[0, -0.05, 0], [0, 0.5, 0], [0, 0.97, 0]], 0.014, 0.002, 0.875, 1, 5, 0.85);
   for (let i = 0; i < whorls; i++) {
@@ -569,7 +651,7 @@ function spruceGeometry(seed, whorls) {
       const dir = [Math.cos(a), 0, Math.sin(a)], side = [-Math.sin(a), 0, Math.cos(a)];
       const droop = 0.3 + 0.25 * r() + 0.2 * (1 - t);
       const s0 = [dir[0] * 0.01, y, dir[2] * 0.01], s1 = [dir[0] * L, y - L * droop, dir[2] * L];
-      const w = L * 0.55, ao = 0.55 + 0.45 * t ** 0.6 * (0.8 + 0.2 * r());
+      const w = L * 0.55 * widen, ao = 0.55 + 0.45 * t ** 0.6 * (0.8 + 0.2 * r());
       for (const tilt of [-0.62, 0.62]) {
         // the spray's plane: turned about the branch by ±35°
         const up = [side[0] * Math.sin(tilt), Math.cos(tilt), side[2] * Math.sin(tilt)];
@@ -584,12 +666,12 @@ function spruceGeometry(seed, whorls) {
   // the leader at the very top
   for (const a of [0, Math.PI / 2]) {
     const d = [Math.cos(a) * 0.02, 0, Math.sin(a) * 0.02];
-    b.quad([-d[0], 0.93, -d[2]], [d[0], 0.93, d[2]], [d[0], 1.01, d[2]], [-d[0], 1.01, -d[2]], [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]], [[0, 0.35], [0, 0.65], [0.5, 0.65], [0.5, 0.35]], 1);
+    b.quad([-d[0], 0.92, -d[2]], [d[0], 0.92, d[2]], [d[0], 1.02, d[2]], [-d[0], 1.02, -d[2]], [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]], [[0.6, 0.32], [0.6, 0.68], [0.86, 0.68], [0.86, 0.32]], 1);
   }
   return b.done();
 }
 // a mountain birch: two or three crooked stems from one foot, a few branches, an open crown of leaf sprays
-function birchGeometry(seed) {
+function birchGeometry(seed, cards = 46, grow = 1) {
   const r = rng(seed), b = builder();
   const stems = 2 + (r() * 2 | 0), tops = [];
   for (let k = 0; k < stems; k++) {
@@ -604,10 +686,10 @@ function birchGeometry(seed) {
     tops.push(...pts.slice(2));
   }
   const cy = 0.62;
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < cards; i++) {
     const p = tops[r() * tops.length | 0];
     const a = r() * 6.28, rr = 0.05 + r() * 0.24, cx = p[0] + Math.cos(a) * rr, cz = p[2] + Math.sin(a) * rr, y = p[1] + (r() - 0.3) * 0.2;
-    const s = 0.12 + r() * 0.09, fa = r() * 6.28, ux = Math.cos(fa) * s, uz = Math.sin(fa) * s, tilt = (r() - 0.5) * 0.6;
+    const s = (0.12 + r() * 0.09) * grow, fa = r() * 6.28, ux = Math.cos(fa) * s, uz = Math.sin(fa) * s, tilt = (r() - 0.5) * 0.6;
     const o = [cx - cx * 0, y, cz];
     const n = (q) => { const v = [q[0], (q[1] - cy) * 0.8 + 0.25, q[2]]; const m = Math.hypot(...v) || 1; return v.map((w) => w / m); };
     const q0 = [o[0] - ux, o[1] - s + tilt * s, o[2] - uz], q1 = [o[0] + ux, o[1] - s - tilt * s, o[2] + uz], q2 = [o[0] + ux, o[1] + s - tilt * s, o[2] + uz], q3 = [o[0] - ux, o[1] + s + tilt * s, o[2] - uz];
@@ -615,45 +697,70 @@ function birchGeometry(seed) {
   }
   return b.done();
 }
-const WHORLS = coarse ? 20 : 30;
+const WHORLS = coarse ? 18 : 24;
 const VARIANTS = [spruceGeometry(3, WHORLS), spruceGeometry(8, WHORLS), spruceGeometry(17, WHORLS), birchGeometry(5), birchGeometry(29)];
+// beyond LOD_R the same trees with half the whorls and wider sprays: as full at that distance, half the work
+const VARIANTS_LO = [spruceGeometry(3, WHORLS >> 1, 1.4), spruceGeometry(8, WHORLS >> 1, 1.4), spruceGeometry(17, WHORLS >> 1, 1.4), birchGeometry(5, 28, 1.25), birchGeometry(29, 28, 1.25)];
+const LOD_R = coarse ? 40 : 55;
 const IMP_W = VARIANTS.map((g, v) => { g.computeBoundingBox(); const bb = g.boundingBox; return 2 * Math.max(-bb.min.x, bb.max.x, -bb.min.z, bb.max.z) * 1.04; });
 
 // ---------------------------------------------------------------- near trees: geometry, placed on the CPU
-function treeMaterial(tex) {
-  const m = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.88, metalness: 0 });
-  m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, uniforms, { uTrans: { value: 0.55 } });
-    sh.vertexShader = 'varying vec3 vW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = LIT_FRAG_HEAD + DITHER + sh.fragmentShader
-      .replace('#include <alphatest_fragment>', /* glsl */`
-  { // keep the needles' coverage in the smaller mipmaps (Golus)
+// the alpha every tree pass agrees on: the texture's, with the needles' coverage kept in the smaller
+// mipmaps (Golus), and gone beyond the hand-over to the pictures
+const TREE_ALPHA = /* glsl */`
+  {
     vec2 tx = vMapUv * vec2(1024.0, 512.0); float mip = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx)))));
-    diffuseColor.a *= 1.0 + mip * 0.28;
+    diffuseColor.a *= (1.0 + mip * 0.28) * (1.0 - uFade);
   }
-  if (distance(vW, uCamPos) > uNearR + 25.0 * ign(gl_FragCoord.xy)) discard;
-#include <alphatest_fragment>`)
+  { float dd = distance(vW, uCamPos), n = ign(gl_FragCoord.xy); if (dd > uDMax + uWMax * n || dd < uDMin + uWMin * n) discard; }
+#include <alphatest_fragment>`;
+const TINT = 'vec3 tintAt(vec2 p) { float a = fract(sin(dot(floor(p * 4.0), vec2(12.9898, 78.233))) * 43758.5453), b = fract(a * 7.31); return vec3(0.8 + 0.4 * a) * vec3(1.0 + 0.06 * b, 1.0, 0.94 - 0.04 * b); }\n';
+const TREE_VW = (sh) => { sh.vertexShader = TINT + 'varying vec3 vW; varying vec3 vTint;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz; vTint = tintAt(vec2(instanceMatrix[3][0], instanceMatrix[3][2]));'); };
+function band(dMin, wMin, dMax, wMax) { return { uDMin: { value: dMin }, uWMin: { value: wMin }, uDMax: { value: dMax }, uWMax: { value: wMax } }; }
+const BAND_HEAD = 'uniform float uDMin, uWMin, uDMax, uWMax;\n';
+function treeMaterial(tex, b) {
+  const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms, b, { uTrans: { value: 0.55 } });
+    TREE_VW(sh);
+    sh.fragmentShader = 'varying vec3 vTint;\n' + LIT_FRAG_HEAD + DITHER + BAND_HEAD + sh.fragmentShader
+      .replace('#include <alphatest_fragment>', 'diffuseColor.rgb *= vTint;\n' + TREE_ALPHA)
       .replace('#include <normal_fragment_begin>', 'float faceDirection = 1.0; vec3 normal = normalize(vNormal); vec3 nonPerturbedNormal = normal;')
       .replace('#include <lights_fragment_begin>', LIT_AFTER_LIGHTS)
       .replace('#include <fog_fragment>', LIT_END);
   };
   return m;
 }
-function treeDepthMaterial(tex) {
-  const m = new THREE.MeshDepthMaterial({ map: tex, alphaTest: 0.5, depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+function treeDepthPass(tex, b) {
+  const m = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, colorWrite: false });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms, b);
+    TREE_VW(sh);
+    sh.fragmentShader = `uniform vec3 uCamPos; uniform float uNearR, uFade; varying vec3 vW; varying vec3 vTint;\n${DITHER}${BAND_HEAD}` + sh.fragmentShader.replace('#include <alphatest_fragment>', TREE_ALPHA);
+  };
   return m;
 }
-const spruceMat = treeMaterial(spruceTex), birchMat = treeMaterial(birchTex);
 const NEAR_MAX = coarse ? 1400 : 3200;
-const near = VARIANTS.map((g, v) => {
-  const tex = v < 3 ? spruceTex : birchTex;
-  const m = new THREE.InstancedMesh(g, v < 3 ? spruceMat : birchMat, NEAR_MAX);
-  m.customDepthMaterial = treeDepthMaterial(tex);
-  m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.count = 0;
-  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  scene.add(m);
-  return m;
-});
+// per variant: the close trees (full detail) and the rest of the near ones (half), each with its depth pass
+function nearSet(geos, b) {
+  const lit = [treeMaterial(spruceTex, b), treeMaterial(birchTex, b)], pre = [treeDepthPass(spruceTex, b), treeDepthPass(birchTex, b)];
+  return geos.map((g, v) => {
+    const tex = v < 3 ? spruceTex : birchTex;
+    const m = new THREE.InstancedMesh(g, lit[v < 3 ? 0 : 1], NEAR_MAX);
+    m.customDepthMaterial = new THREE.MeshDepthMaterial({ map: tex, alphaTest: 0.5, depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+    m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.count = 0;
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const p = new THREE.InstancedMesh(g, pre[v < 3 ? 0 : 1], NEAR_MAX);
+    p.instanceMatrix = m.instanceMatrix; p.frustumCulled = false; p.count = 0; p.renderOrder = -5;
+    m.userData.pre = p;
+    scene.add(p, m);
+    return m;
+  });
+}
+const nearHi = nearSet(VARIANTS, band(-1, 0, LOD_R, 12));
+const nearLo = nearSet(VARIANTS_LO, band(LOD_R, 12, uniforms.uNearR.value, 25));
+const near = [...nearHi, ...nearLo];
 // the trees of a 40 m tile, kept once computed
 const TILE = 8, tiles = new Map();
 function tileTrees(ti, tj) {
@@ -667,25 +774,32 @@ function tileTrees(ti, tj) {
   return list;
 }
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), SC = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
-let nearKey = '';
+const FR = new THREE.Frustum(), PV = new THREE.Matrix4(), SPH = new THREE.Sphere();
+let nearKey = '', nearList = [];
+// every frame: of the trees near enough, those in view (with a margin, for shadows cast into it)
 function updateNear(c) {
   const R = uniforms.uNearR.value + 30, ts = TILE * CELL;
   const t0 = Math.floor((c.x - R) / ts), t1 = Math.floor((c.x + R) / ts), u0 = Math.floor((c.z - R) / ts), u1 = Math.floor((c.z + R) / ts);
-  const key = `${t0},${t1},${u0},${u1},${Math.round(c.y / 20)}`;
-  if (key === nearKey) return;
-  nearKey = key;
-  const counts = near.map(() => 0);
-  for (let tj = u0; tj <= u1; tj++) for (let ti = t0; ti <= t1; ti++) {
-    for (const t of tileTrees(ti, tj)) {
-      const d = Math.hypot(t.x - c.x, t.y + t.s * 0.4 - c.y, t.z - c.z);
-      if (d > R) continue;
-      const m = near[t.v];
-      if (counts[t.v] >= NEAR_MAX) continue;
-      M4.compose(V.set(t.x, t.y, t.z), Q.setFromAxisAngle(UP, t.rot), SC.set(t.s, t.s, t.s));
-      m.setMatrixAt(counts[t.v]++, M4);
+  const key = `${t0},${t1},${u0},${u1}`;
+  if (key !== nearKey) {
+    nearKey = key; nearList = [];
+    for (let tj = u0; tj <= u1; tj++) for (let ti = t0; ti <= t1; ti++) for (const t of tileTrees(ti, tj)) {
+      if (!t.m) { M4.compose(V.set(t.x, t.y, t.z), Q.setFromAxisAngle(UP, t.rot), SC.set(t.s, t.s, t.s)); t.m = M4.toArray(new Float32Array(16)); }
+      nearList.push(t);
     }
   }
-  near.forEach((m, v) => { m.count = counts[v]; m.instanceMatrix.needsUpdate = true; });
+  FR.setFromProjectionMatrix(PV.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  const hi = nearHi.map(() => 0), lo = nearLo.map(() => 0);
+  for (const t of nearList) {
+    const d = Math.hypot(t.x - c.x, t.y + t.s * 0.4 - c.y, t.z - c.z);
+    if (d > R) continue;
+    SPH.center.set(t.x, t.y + t.s * 0.5, t.z); SPH.radius = t.s * 0.6 + 14;
+    if (!FR.intersectsSphere(SPH)) continue;
+    if (d < LOD_R + 16 && hi[t.v] < NEAR_MAX) nearHi[t.v].instanceMatrix.array.set(t.m, 16 * hi[t.v]++);   // both in the hand-over band
+    if (d > LOD_R - 6 && lo[t.v] < NEAR_MAX) nearLo[t.v].instanceMatrix.array.set(t.m, 16 * lo[t.v]++);
+  }
+  nearHi.forEach((m, v) => { m.count = m.userData.pre.count = hi[v]; m.instanceMatrix.needsUpdate = true; });
+  nearLo.forEach((m, v) => { m.count = m.userData.pre.count = lo[v]; m.instanceMatrix.needsUpdate = true; });
 }
 
 // ---------------------------------------------------------------- far trees: their pictures, scattered by the GPU
@@ -721,47 +835,115 @@ function bake() {
   renderer.setRenderTarget(prevTarget);
   renderer.setClearColor(0x000000, 1);
 }
-function ringMesh(cell, n, rIn, wIn, rOut, wOut, salt, scaleMul) {
+// the worker: the placement rule's own source, sent over as text, run over every cell near the flight
+function placeFar(t) {
+  const fns = [['clamp', clamp], ['smooth', smooth], ['sstep', sstep], ['mix', mix], ['hash2', hash2], ['ridges', ridges], ['cr', cr],
+    ['treeline', treeline], ['birchShare', birchShare], ['corridor', corridor]].map(([n, f]) => `const ${n} = ${f};`).join('\n');
+  const decl = [noise, mapHeight, groundFrom, distToPath, forestAt, treeAt].map(String).join('\n');
+  const src = `const WM = ${WM}, HM = ${HM}, HMIN = ${HMIN}, HMAX = ${HMAX}, WATER = ${WATER}, CELL = ${CELL};
+const PATH = ${JSON.stringify(PATH)};
+const CORR = ${JSON.stringify(CORR)};
+let T = null;
+${fns}
+${decl}
+onmessage = ({ data }) => {
+  T = data.T;
+  const tr = data.track;
+  {
+    const F = data.forest, out = new Uint8Array(F.n * F.m);
+    for (let j = 0; j < F.m; j++) for (let i = 0; i < F.n; i++) {
+      const x = F.x0 + (i + 0.5) * F.cell, z = F.z0 + (j + 0.5) * F.cell;
+      out[j * F.n + i] = Math.round(255 * forestAt(x, z, mapHeight(x, z)));
+    }
+    postMessage({ forest: out }, [out.buffer]);
+  }
+  const dTrack = (x, z) => { let d = 1e9; for (let k = 0; k < tr.length - 1; k++) { const a = tr[k], b = tr[k + 1], vx = b[0] - a[0], vz = b[1] - a[1]; const q = clamp(((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz)); d = Math.min(d, Math.hypot(x - a[0] - vx * q, z - a[1] - vz * q)); } return d; };
+  const xs = tr.map((p) => p[0]), zs = tr.map((p) => p[1]);
+  const out = data.rings.map(({ cell, salt, reach, scale, tile }) => {
+    const tiles = new Map();
+    const i0 = Math.floor((Math.min(...xs) - reach) / cell), i1 = Math.ceil((Math.max(...xs) + reach) / cell);
+    const j0 = Math.floor((Math.min(...zs) - reach) / cell), j1 = Math.ceil((Math.max(...zs) + reach) / cell);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      if (dTrack((i + 0.5) * cell, (j + 0.5) * cell) > reach) continue;
+      const t = treeAt(i, j, cell, salt);
+      if (!t) continue;
+      const k = Math.floor(t.x / tile) + ',' + Math.floor(t.z / tile);
+      let b = tiles.get(k); if (!b) tiles.set(k, b = []);
+      b.push(t.x, t.y, t.z, t.s * scale, t.v);
+    }
+    return [...tiles].map(([k, b]) => { const [i, j] = k.split(',').map(Number); return { x: (i + 0.5) * tile, z: (j + 0.5) * tile, data: new Float32Array(b) }; });
+  });
+  postMessage({ far: out }, out.flat().map((q) => q.data.buffer));
+};`;
+  const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  const w = new Worker(url);
+  // where the camera goes, from the start of the flight to its end
+  const track = [along(S0)];
+  for (let s = S0 + 200; s < LEN * 1.1; s += 200) track.push(along(s));
+  track.push(along(LEN * 1.1));
+  const xs = track.map((q) => q[0]), zs = track.map((q) => q[1]), cell = 20;
+  const F = { cell, x0: Math.min(...xs) - 5000, z0: Math.min(...zs) - 5000 };
+  F.n = Math.ceil((Math.max(...xs) + 5000 - F.x0) / cell); F.m = Math.ceil((Math.max(...zs) + 5000 - F.z0) / cell);
+  return new Promise((res) => {
+    w.onmessage = ({ data }) => {
+      if (data.forest) {
+        const tex = new THREE.DataTexture(data.forest, F.n, F.m, THREE.RedFormat, THREE.UnsignedByteType);
+        tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+        uniforms.uForest.value = tex; uniforms.uForestBox.value.set(F.x0, F.z0, F.n * cell, F.m * cell);
+        drawn = -1; request();
+        return;
+      }
+      res(data.far); w.terminate(); URL.revokeObjectURL(url);
+    };
+    w.postMessage({ T: { w: t.w, h: t.h, data: t.data }, track, forest: F, rings: RINGS.map(({ cell, salt, reach, scale, tile }) => ({ cell, salt, reach, scale, tile })) });
+  });
+}
+const R0 = coarse ? 520 : 780;
+const RINGS = [
+  { cell: CELL, salt: 0, scale: 1.0, reach: R0 + 120, tile: 1000, rIn: uniforms.uNearR.value, wIn: 25, rOut: R0, wOut: 100 },
+  { cell: CELL * 2, salt: 1, scale: 1.15, reach: coarse ? 1900 : 3700, tile: 2000, rIn: R0, wIn: 100, rOut: coarse ? 1600 : 3300, wOut: 400 },
+];
+function ringMesh(data, ring, tx, tz, tile) {
   const g = new THREE.InstancedBufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0], 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
   g.setIndex([0, 1, 2, 0, 2, 3]);
-  g.instanceCount = n * n;
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
-  const u = { uCell: { value: cell }, uN: { value: n }, uOrigin: { value: new THREE.Vector2() }, uRIn: { value: rIn }, uWIn: { value: wIn }, uROut: { value: rOut }, uWOut: { value: wOut }, uSalt: { value: salt }, uScaleMul: { value: scaleMul } };
-  const m = new THREE.MeshStandardMaterial({ map: bakeRT.textures[0], alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, metalness: 0 });
+  const ib = new THREE.InstancedInterleavedBuffer(data, 5);
+  g.setAttribute('aFoot', new THREE.InterleavedBufferAttribute(ib, 3, 0));
+  g.setAttribute('aSize', new THREE.InterleavedBufferAttribute(ib, 1, 3));
+  g.setAttribute('aVariant', new THREE.InterleavedBufferAttribute(ib, 1, 4));
+  g.instanceCount = data.length / 5;
+  let y = 0; for (let i = 1; i < data.length; i += 5) y += data[i];
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(tx, y / (data.length / 5), tz), tile * 0.72 + 60);
+  const u = { uRIn: { value: ring.rIn }, uWIn: { value: ring.wIn }, uROut: { value: ring.rOut }, uWOut: { value: ring.wOut } };
+  const m = new THREE.MeshLambertMaterial({ map: bakeRT.textures[0], alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms, u, { uTrans: { value: 0.55 }, uNormals: { value: bakeRT.textures[1] }, uImpW: { value: IMP_W } });
-    sh.vertexShader = `uniform vec3 uCamPos; uniform float uCell, uRIn, uROut, uWOut, uScaleMul; uniform int uN, uSalt; uniform vec2 uOrigin; uniform float uImpW[${VARIANTS.length}];
-varying vec3 vW; varying vec3 vRight; varying vec3 vFwd; varying float vReject; varying float vVariant;
-${NOISE}${LAND}${FOREST}` + sh.vertexShader
+    sh.vertexShader = `attribute vec3 aFoot; attribute float aSize, aVariant;
+uniform vec3 uCamPos; uniform float uRIn, uROut, uWOut; uniform float uImpW[${VARIANTS.length}];
+varying vec3 vW; varying vec3 vRight; varying vec3 vFwd; varying vec3 vTint;\n${TINT}` + sh.vertexShader
       .replace('#include <beginnormal_vertex>', /* glsl */`
-  ivec2 cellId = ivec2(floor(uOrigin / uCell)) + ivec2(gl_InstanceID % uN, gl_InstanceID / uN);
-  vec3 foot; float size, rot; int variant;
-  bool ok = treeAt(cellId, uCell, uSalt, foot, size, variant, rot);
-  size *= uScaleMul;
-  float dcam = distance(foot + vec3(0.0, size * 0.4, 0.0), uCamPos);
-  vReject = (!ok || dcam < uRIn - 30.0 || dcam > uROut + uWOut + 30.0) ? 1.0 : 0.0;
-  vec3 toCam = uCamPos - foot; vec3 fwd = normalize(vec3(toCam.x, 0.0, toCam.z) + 1e-5); vec3 right = vec3(fwd.z, 0.0, -fwd.x);
-  vRight = right; vFwd = fwd; vVariant = float(variant);
+  int variant = int(aVariant + 0.5);
+  float dcam = distance(aFoot + vec3(0.0, aSize * 0.4, 0.0), uCamPos);
+  bool reject = dcam < uRIn - 30.0 || dcam > uROut + uWOut + 30.0;
+  vec3 toCam = uCamPos - aFoot; vec3 fwd = normalize(vec3(toCam.x, 0.0, toCam.z) + 1e-5); vec3 right = vec3(fwd.z, 0.0, -fwd.x);
+  vRight = right; vFwd = fwd; vTint = tintAt(aFoot.xz);
   vec3 objectNormal = fwd;`)
       .replace('#include <begin_vertex>', /* glsl */`
-  float iw = uImpW[variant];
-  vec3 transformed = foot + right * position.x * iw * size + vec3(0.0, position.y * 1.02 * size, 0.0);
+  vec3 transformed = aFoot + right * position.x * uImpW[variant] * aSize + vec3(0.0, position.y * 1.02 * aSize, 0.0);
   vW = transformed;`)
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\n')
       .replace('#include <fog_vertex>', `#include <fog_vertex>
   vMapUv = vec2((float(variant) + uv.x) / ${VARIANTS.length}.0, uv.y);
-  if (vReject > 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);`);
-    sh.fragmentShader = `uniform sampler2D uNormals; uniform float uRIn, uWIn, uROut, uWOut; varying vec3 vRight; varying vec3 vFwd; varying float vReject;\n` + LIT_FRAG_HEAD + DITHER + sh.fragmentShader
+  if (reject) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);`);
+    sh.fragmentShader = `uniform sampler2D uNormals; uniform float uRIn, uWIn, uROut, uWOut; varying vec3 vRight; varying vec3 vFwd; varying vec3 vTint;\n` + LIT_FRAG_HEAD + DITHER + sh.fragmentShader
       .replace('#include <map_fragment>', /* glsl */`
   vec4 tc = texture(map, vMapUv);
-  diffuseColor.rgb *= pow(tc.rgb, vec3(2.2)); diffuseColor.a = tc.a;`)
+  diffuseColor.rgb *= pow(tc.rgb, vec3(2.2)) * vTint; diffuseColor.a = tc.a;`)
       .replace('#include <alphatest_fragment>', /* glsl */`
   {
     vec2 tx = vMapUv * vec2(${ATLAS_W * VARIANTS.length}.0, ${ATLAS_H}.0); float mip = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx)))));
-    diffuseColor.a *= 1.0 + mip * 0.3;
+    diffuseColor.a *= (1.0 + mip * 0.3) * (1.0 - uFade);
     float dd = distance(vW, uCamPos), n = ign(gl_FragCoord.xy);
     if (dd < uRIn + uWIn * n || dd > uROut + uWOut * n) discard;
   }
@@ -775,21 +957,436 @@ ${NOISE}${LAND}${FOREST}` + sh.vertexShader
       .replace('#include <fog_fragment>', LIT_END);
   };
   const mesh = new THREE.Mesh(g, m);
-  mesh.frustumCulled = false;
-  mesh.userData.u = u;
+  mesh.userData = { x: tx, z: tz, r: tile * 0.72 + 30, ring };
+  return mesh;
+}
+const rings = [];
+// a tile is drawn only if some of it lies within its ring's distances
+function updateRings(c) {
+  for (const m of rings) {
+    const { x, z, r, ring } = m.userData, d = Math.hypot(x - c.x, z - c.z);
+    m.visible = !HIDE.includes('rings') && d + r > ring.rIn - 40 && d - r < ring.rOut + ring.wOut + 40 + Math.max(0, c.y - 1500);
+  }
+}
+
+
+// ---------------------------------------------------------------- the group on the trail
+// Six members walking in, dressed as in intro.js: big packs with a mat strapped under, daypacks, poles,
+// hats. Built from simple solids (a rounded box is a squashed superellipsoid), one mesh each; the legs
+// and arms swing about their hips and shoulders in the vertex shader, so the shadows walk too.
+const HK = [
+  { jacket: [150, 62, 44], pack: [44, 52, 50], pad: [217, 142, 60], big: true, hat: [214, 204, 184], pom: true, poles: true },
+  { jacket: [48, 64, 86], pack: [217, 142, 60], pad: [62, 98, 104], big: true, hat: [52, 56, 58] },
+  { jacket: [184, 142, 64], pack: [40, 58, 48], big: false, hair: [150, 116, 70], tail: true, poles: true },
+  { jacket: [72, 88, 64], pack: [98, 68, 48], pad: [62, 98, 104], big: true, hat: [150, 62, 44], pom: true },
+  { jacket: [116, 44, 50], pack: [217, 142, 60], pad: [44, 52, 50], big: true, hat: [214, 204, 184], poles: true },
+  { jacket: [58, 62, 64], pack: [56, 74, 92], big: false, hat: [217, 142, 60], pom: true },
+].map((h, i) => ({ ...h, s: 201 + i * 4.4 + (i % 2) * 0.9, off: [-0.28, 0.38, -0.36, 0.3, -0.22, 0.4][i], step: i * 1.7 }));
+const cLin = (a) => lin(a[0], a[1], a[2]);
+function roundBox(w, h, d, e = 0.28) {
+  const g = new THREE.SphereGeometry(1, 16, 12), a = g.attributes.position;
+  for (let i = 0; i < a.count; i++) {
+    const f = (v) => Math.sign(v) * Math.abs(v) ** e;
+    a.setXYZ(i, f(a.getX(i)) * w / 2, f(a.getY(i)) * h / 2, f(a.getZ(i)) * d / 2);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function hikerGeometry(h) {
+  const P = [], N = [], C = [], A = [], V3 = [];
+  const add = (geo, m, col, part = 0, pivot = [0, 0, 0]) => {
+    const g = (geo.index ? geo.toNonIndexed() : geo).applyMatrix4(m);
+    const pa = g.attributes.position, na = g.attributes.normal;
+    for (let i = 0; i < pa.count; i++) { P.push(pa.getX(i), pa.getY(i), pa.getZ(i)); N.push(na.getX(i), na.getY(i), na.getZ(i)); C.push(col.r, col.g, col.b); A.push(part); V3.push(...pivot); }
+  };
+  const T = (x, y, z) => new THREE.Matrix4().makeTranslation(x, y, z);
+  const S = (x, y, z) => new THREE.Matrix4().makeScale(x, y, z);
+  const R = (x, y, z) => new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(x, y, z));
+  const cyl = (rb, rt, len, seg = 8) => new THREE.CylinderGeometry(rt, rb, len, seg, 1);
+  const jacket = cLin(h.jacket), jShade = cLin(h.jacket.map((v) => v * 0.8)), pants = lin(34, 38, 38), boot = lin(40, 32, 26), glove = lin(36, 38, 38);
+  const pack = cLin(h.pack), packD = cLin(h.pack.map((v) => v * 0.72)), hair = cLin(h.hair || [52, 40, 32]), skin = lin(196, 150, 120);
+  for (const side of [-1, 1]) {
+    const leg = side < 0 ? 1 : 2, hip = [side * 0.1, 0.9, 0];
+    add(cyl(0.058, 0.078, 0.84), T(side * 0.1, 0.48, 0), pants, leg, hip);
+    add(roundBox(0.12, 0.12, 0.27), T(side * 0.1, 0.06, 0.035), boot, leg, hip);
+    const arm = side < 0 ? 3 : 4, sh = [side * 0.235, 1.42, 0];
+    add(cyl(0.048, 0.064, 0.56), T(side * 0.235, 1.14, 0).multiply(R(0, 0, side * -0.06)), jShade, arm, sh);
+    add(new THREE.SphereGeometry(0.047, 8, 6), T(side * 0.25, 0.84, 0.01), glove, arm, sh);
+    if (h.poles) add(cyl(0.01, 0.012, 1.2), T(side * 0.27, 0.3, -0.05).multiply(R(-0.2, 0, side * -0.06)), lin(150, 150, 146), arm, sh);
+  }
+  add(cyl(0.17, 0.205, 0.58, 12), T(0, 1.19, 0).multiply(S(1, 1, 0.7)), jacket);
+  add(new THREE.SphereGeometry(0.205, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), T(0, 1.47, 0).multiply(S(1, 0.42, 0.7)), jacket);
+  add(cyl(0.05, 0.05, 0.1), T(0, 1.52, 0), skin);
+  add(new THREE.SphereGeometry(0.108, 14, 10), T(0, 1.64, 0).multiply(S(0.95, 1.05, 1)), hair);
+  if (h.tail) add(new THREE.SphereGeometry(0.05, 8, 6), T(0, 1.56, -0.11).multiply(S(0.8, 1.6, 0.8)), hair);
+  if (h.hat) {
+    const hat = cLin(h.hat);
+    add(new THREE.SphereGeometry(0.116, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), T(0, 1.655, 0).multiply(S(1, 1.08, 1.02)), hat);
+    add(cyl(0.118, 0.118, 0.045, 14), T(0, 1.625, 0), cLin(h.hat.map((v) => v * 0.85)));
+    if (h.pom) add(new THREE.SphereGeometry(0.045, 8, 6), T(0, 1.8, 0), hat);
+  }
+  // the pack, on the back (the camera sees it: −z, the hiker walks towards +z)
+  const pw = h.big ? 0.4 : 0.32, ph = h.big ? 0.66 : 0.44, pd = h.big ? 0.26 : 0.18, py = h.big ? 1.2 : 1.24;
+  add(roundBox(pw, ph, pd), T(0, py, -0.2 - pd / 2 + 0.06), pack);
+  add(roundBox(pw * 1.04, ph * 0.26, pd * 1.08), T(0, py + ph * 0.42, -0.2 - pd / 2 + 0.06), packD);             // the lid
+  add(roundBox(pw * 0.62, ph * 0.36, pd * 0.4), T(0, py - ph * 0.2, -0.2 - pd + 0.04), packD);                 // front pocket
+  if (h.big) {
+    add(roundBox(0.42, 0.07, 0.3), T(0, 0.93, -0.06), packD);                                                   // hip belt
+    if (h.pad) add(cyl(0.075, 0.075, 0.6, 12), T(0, py - ph / 2 - 0.06, -0.2 - pd / 2 + 0.06).multiply(R(0, 0, Math.PI / 2)), cLin(h.pad));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(A, 1));
+  g.setAttribute('aPivot', new THREE.Float32BufferAttribute(V3, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+// the stride: legs and arms swing about their pivots, opposite each other; the body rises a little
+const WALK = /* glsl */`
+attribute float aPart; attribute vec3 aPivot;
+uniform float uPhase;
+mat3 swingOf() {
+  float sw = sin(uPhase);
+  float a = aPart < 0.5 ? 0.0 : aPart < 1.5 ? 0.42 * sw : aPart < 2.5 ? -0.42 * sw : aPart < 3.5 ? -0.3 * sw : 0.3 * sw;
+  float c = cos(a), s = sin(a);
+  return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+}
+`;
+const WALK_POS = 'vec3 transformed = swingOf() * (position - aPivot) + aPivot; transformed.y += 0.03 * abs(cos(uPhase));';
+function hikerMesh(h) {
+  const u = { uPhase: { value: 0 } };
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms, u, { uTrans: { value: 0.0 } });
+    sh.vertexShader = WALK + 'varying vec3 vW;\n' + sh.vertexShader
+      .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = swingOf() * normal;')
+      .replace('#include <begin_vertex>', WALK_POS)
+      .replace('#include <project_vertex>', '#include <project_vertex>\n  vW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = LIT_FRAG_HEAD + sh.fragmentShader
+      .replace('#include <lights_fragment_begin>', LIT_AFTER_LIGHTS + `
+  { // the low sun ahead lights their edges
+    float rim = pow(1.0 - max(dot(normal, geometryViewDir), 0.0), 3.0) * max(dot(-geometryViewDir, directLight.direction), 0.0);
+    reflectedLight.directDiffuse += directLight.color * rim * 0.35 * sunVis(vW.xz);
+  }`)
+      .replace('#include <fog_fragment>', LIT_END + '\n  gl_FragColor.a = 1.0 - uFade;');
+  };
+  const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  d.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = WALK + sh.vertexShader.replace('#include <begin_vertex>', WALK_POS);
+  };
+  const mesh = new THREE.Mesh(hikerGeometry(h), m);
+  mesh.customDepthMaterial = d; mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.userData = { h, u };
   scene.add(mesh);
   return mesh;
 }
-const R0 = coarse ? 520 : 780;
-const rings = [
-  ringMesh(CELL, Math.ceil(2 * (R0 + 110) / CELL), uniforms.uNearR.value, 25, R0, 100, 0, 1.0),
-  ringMesh(CELL * 2, Math.ceil(2 * (coarse ? 1900 : 3700) / (CELL * 2)), R0, 100, coarse ? 1600 : 3300, 400, 1, 1.15),
-];
-function updateRings(c) {
-  for (const r of rings) {
-    const u = r.userData.u, half = u.uN.value * u.uCell.value / 2;
-    u.uOrigin.value.set(Math.floor((c.x - half) / u.uCell.value) * u.uCell.value, Math.floor((c.z - half) / u.uCell.value) * u.uCell.value);
+const hikers = HK.map(hikerMesh);
+function updateHikers(p) {
+  const show = p < 0.14;
+  const walked = 0.8 * (camS(Math.min(p, 0.035)) - S0) + 60 * p;
+  for (const mesh of hikers) {
+    mesh.visible = show;
+    if (!show) continue;
+    const { h, u } = mesh.userData;
+    const sh = h.s + walked, c = along(sh), c2 = along(sh + 2);
+    const dx = c2[0] - c[0], dz = c2[1] - c[1], dl = Math.hypot(dx, dz) || 1;
+    const x = c[0] - dz / dl * h.off, z = c[1] + dx / dl * h.off;
+    mesh.position.set(x, ground(x, z), z);
+    mesh.rotation.y = Math.atan2(dx, dz);
+    u.uPhase.value = sh * (Math.PI * 2 / 1.5) + h.step;
   }
+}
+
+// ---------------------------------------------------------------- the mountain that is the mark
+// At the end of the valley, beyond it, a twin peak whose outline from the flight's end is the club's
+// mark exactly: the small peak, the big one, the slanted ravine between them and the snow couloir
+// that is the mark's cleft. Each of the mark's shapes is filled with a grid; the outline stays in the
+// plane that faces the camera, and the inside comes forward by its distance from the outline, so the
+// faces meet in ridges like a roof's (a straight skeleton), lit by the low sun, snow on the tops.
+const MARK_L = [[74, 84], [116, 168], [32, 168]];
+const MARK_R = [[134, 30], [203, 168], [129, 168], [97, 104]];
+const MARK_K = [[115, 98], [137, 98], [163, 150], [141, 150]];
+const BACK = [[62, 168], [92, 110], [108, 100], [126, 112], [156, 168]];   // not part of the mark: gone before it forms
+const HERO = { dist: 9200, width: 7400, base: 700, rise: 1500 };
+const HERO_AT = (() => {
+  const c = along(LEN * 1.1 + HERO.dist), a = PATH[PATH.length - 2], b = PATH[PATH.length - 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const f = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+  return { c, f, r: [-f[1], f[0]] };
+})();
+// the rock is ragged along the outline, and straightens as it becomes the mark
+const rough = (mx, my) => (my < 167 ? (noise(mx * 0.31, my * 0.29) - 0.5) * 2 * 3.2 : 0);
+function markToWorld(mx, my, w, out = new THREE.Vector3()) {
+  const u = (mx - 117.5) / 171 * HERO.width, y = HERO.base + (168 - my) / 138 * HERO.rise;
+  return out.set(HERO_AT.c[0] + HERO_AT.r[0] * u + HERO_AT.f[0] * w, y, HERO_AT.c[1] + HERO_AT.r[1] * u + HERO_AT.f[1] * w);
+}
+const inPoly = (x, y, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+function edgeDist(x, y, poly, skipBase) {
+  let d = 1e9, q = null;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    if (skipBase && a[1] === 168 && b[1] === 168) continue;
+    const vx = b[0] - a[0], vy = b[1] - a[1], t = clamp(((x - a[0]) * vx + (y - a[1]) * vy) / (vx * vx + vy * vy));
+    const px = a[0] + vx * t, py = a[1] + vy * t, dd = Math.hypot(x - px, y - py);
+    if (dd < d) { d = dd; q = [px, py]; }
+  }
+  return [d, q];
+}
+function heroGeometry() {
+  const P = [], C = [], rock = lin(88, 94, 100), rockD = lin(60, 66, 72), snow = lin(236, 238, 240), W = new THREE.Vector3();
+  const step = coarse ? 2.4 : 1.4;
+  for (const poly of [MARK_L, MARK_R, BACK]) {
+    const back = poly === BACK;
+    const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]);
+    const x0 = Math.min(...xs) - step, x1 = Math.max(...xs) + step, y0 = Math.min(...ys) - step, y1 = 168 + 24;
+    const nx = Math.ceil((x1 - x0) / step), ny = Math.ceil((y1 - y0) / step);
+    const vert = [];
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+      let x = x0 + i * step, y = y0 + j * step;
+      const below = y > 168;                                    // the skirt that sinks into the land
+      const yy = Math.min(y, 168);
+      const inside = inPoly(x, yy, poly) || (below && inPoly(x, 167.9, poly));
+      let d = 0;
+      if (!inside) { const [, q] = edgeDist(x, yy, poly, false); x = q[0]; y = below ? y : q[1]; }
+      else d = edgeDist(x, yy, poly, true)[0];
+      const edge = !inside;
+      const ry = edge ? rough(x, y) : 0;
+      const n = noise(x * 0.35 + 7, y * 0.35) - 0.5, n2 = noise(x * 1.3, y * 1.3 + 3) - 0.5;
+      let w = -Math.min(d, 60) * (back ? 14 : 24) - (edge ? 0 : n * 90 + n2 * 30) + (back ? 1500 : 0);
+      const couloir = poly === MARK_R && inPoly(x, y, MARK_K);
+      if (couloir) w += 70;
+      markToWorld(x, y + ry + (edge ? 0 : n2 * 1.2), w, W);
+      const top = 1 - (y - 30) / 138;
+      const snowy = couloir || top + n * 0.35 + n2 * 0.1 > (back ? 0.5 : 0.62);
+      const c = snowy ? snow : (n2 > 0.12 ? rockD : rock);
+      vert.push({ p: W.toArray(), c, ok: inside || edge });
+    }
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
+      const q = [vert[a], vert[b], vert[c], vert[d]];
+      if (!q.some((v, k) => { const x = x0 + ((k & 1) ? i + 1 : i) * step, y = y0 + (k > 1 ? j + 1 : j) * step; return inPoly(x, Math.min(y, 167.9), poly); })) continue;
+      for (const k of [a, c, b, b, c, d]) { P.push(...vert[k].p); C.push(vert[k].c.r, vert[k].c.g, vert[k].c.b); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
+}
+const heroMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true });
+heroMat.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, uniforms, { uTrans: { value: 0 } });
+  sh.vertexShader = 'varying vec3 vW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+  sh.fragmentShader = LIT_FRAG_HEAD + sh.fragmentShader
+    .replace('#include <lights_fragment_begin>', LIT_AFTER_LIGHTS)
+    .replace('#include <fog_fragment>', LIT_END + '\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, hazeTowards(vW), uHeroOut); gl_FragColor.a = 1.0 - uFade;');
+  sh.fragmentShader = 'uniform float uHeroOut;\n' + sh.fragmentShader;
+};
+uniforms.uHeroOut = { value: 0 };
+let hero = null;
+
+// ---------------------------------------------------------------- the mark, drawn over the picture at the end
+// When the colour drains, a flat copy of the mountain's outline takes over at the same pixels (the
+// outline lies in the plane that faces the camera, projected through the same camera), then moves and
+// straightens onto the mark of the title card beneath, where the page's own logo appears over it.
+const ov = document.createElement('canvas');
+ov.className = 'intro-overlay'; ov.setAttribute('aria-hidden', 'true');
+Object.assign(ov.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+canvas.after(ov);
+const og = ov.getContext('2d');
+const lockupEl = section.querySelector('.intro-end-lockup');
+const lockupRect = () => lockupEl?.getBoundingClientRect() ?? null;
+document.fonts?.ready.then(() => { drawn = -1; request(); });
+function outline(poly, n) {
+  const out = [];
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k], b = poly[(k + 1) % poly.length];
+    for (let i = 0; i < n; i++) out.push([mix(a[0], b[0], i / n), mix(a[1], b[1], i / n)]);
+  }
+  return out;
+}
+const OUT_L = outline(MARK_L, 24), OUT_R = outline(MARK_R, 24), OUT_K = outline(MARK_K, 10);
+const PV3 = new THREE.Vector3(), FWD = new THREE.Vector3();
+let ovDrawn = false;
+function drawMark(p) {
+  // gone once the page's logo (which fades in over 0.955–0.99) is there
+  const show = sstep(0.835, 0.875, p) * (1 - sstep(0.96, 0.985, p)), morph = sstep(0.86, 0.96, p);
+  const w = Math.round(W * DPR), h = Math.round(H * DPR);
+  if (ov.width !== w || ov.height !== h) { ov.width = w; ov.height = h; ovDrawn = true; }
+  if (show <= 0) { if (ovDrawn) { og.clearRect(0, 0, ov.width, ov.height); ovDrawn = false; } return; }
+  ovDrawn = true;
+  og.setTransform(DPR, 0, 0, DPR, 0, 0);
+  og.clearRect(0, 0, W, H);
+  const lk = lockupRect(), sr = stage.getBoundingClientRect();
+  const target = (mx, my) => lk ? [lk.left - sr.left + (89 + (mx - 32) * 0.90058) * lk.width / 332, lk.top - sr.top + (26 + (my - 30) * 0.90058) * lk.height / 242.9] : [W / 2, H / 2];
+  const pt = (mx, my) => {
+    markToWorld(mx, my + rough(mx, my) * (1 - morph), 0, PV3).project(cam);
+    const t = target(mx, my);
+    return [mix((PV3.x + 1) / 2 * W, t[0], morph), mix((1 - PV3.y) / 2 * H, t[1], morph)];
+  };
+  const path = (list) => { const q = new Path2D(); list.forEach(([mx, my], i) => { const [x, y] = pt(mx, my); i ? q.lineTo(x, y) : q.moveTo(x, y); }); q.closePath(); return q; };
+  const hz = [176, 180, 178], ink = [29, 29, 27], pap = [244, 242, 238], sn = [208, 211, 209];
+  const col = (a, b, t, al = 1) => `rgba(${mix(a[0], b[0], t) | 0},${mix(a[1], b[1], t) | 0},${mix(a[2], b[2], t) | 0},${al})`;
+  const [, yTop] = pt(134, 30), [, yBase] = pt(134, 168);
+  const gr = og.createLinearGradient(0, yTop, 0, yBase);
+  gr.addColorStop(0, col(sn, ink, morph, show)); gr.addColorStop(0.36, col(sn, ink, morph, show));
+  gr.addColorStop(0.44, col(hz, ink, morph, show)); gr.addColorStop(1, col(hz, ink, morph, show));
+  og.fillStyle = gr;
+  og.fill(path(OUT_L)); og.fill(path(OUT_R));
+  og.fillStyle = col(sn, pap, morph, show);
+  og.fill(path(OUT_K));
+}
+
+
+// ---------------------------------------------------------------- the forest floor near the camera
+// Tufts of autumn grass, blueberry and lingonberry turned red, heather, brown bracken: crossed cards
+// scattered by the GPU in a window around the camera (the same hash, so they stay put), off the trail
+// and out of the water, lit through from behind by the low sun. Only while the camera is low.
+function coverTexture() {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+  const g = c.getContext('2d'), r = rng(41);
+  g.lineCap = 'round';
+  // 0: grass
+  for (let i = 0; i < 90; i++) {
+    const x0 = 128 + (r() - 0.5) * 70, len = 90 + r() * 140, lean = (r() - 0.5) * 1.4;
+    g.strokeStyle = ['#8a7a4a', '#7a6a3e', '#9a8a54', '#6a6a44', '#a08a50', '#5a5a3a', '#74704a'][r() * 7 | 0]; g.lineWidth = 1.4 + r() * 1.8;
+    g.beginPath(); g.moveTo(x0, 256); g.quadraticCurveTo(x0 + lean * len * 0.3, 256 - len * 0.6, x0 + lean * len * 0.7, 256 - len); g.stroke();
+  }
+  // 1: blueberry and lingonberry
+  const leaf = (x, y, a, l, col) => { g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = col; g.beginPath(); g.ellipse(0, 0, l, l * 0.55, 0, 0, 7); g.fill(); g.restore(); };
+  for (let i = 0; i < 14; i++) {
+    let x = 384 + (r() - 0.5) * 120, y = 256, a = -Math.PI / 2 + (r() - 0.5) * 1.2;
+    for (let k = 0; k < 8; k++) {
+      const nx = x + Math.cos(a) * 16, ny = y + Math.sin(a) * 16;
+      g.strokeStyle = '#4a3326'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+      for (const sd of [-1, 1]) leaf(nx, ny, a + sd * 1.1, 7 + r() * 4, ['#a8402a', '#c05a2c', '#8a3024', '#b87a30', '#6a7a36', '#d06a34'][r() * 6 | 0]);
+      x = nx; y = ny; a += (r() - 0.5) * 0.6;
+    }
+  }
+  // 2: heather
+  for (let i = 0; i < 40; i++) {
+    let x = 640 + (r() - 0.5) * 110, y = 256, a = -Math.PI / 2 + (r() - 0.5) * 1.0;
+    for (let k = 0; k < 9; k++) {
+      const nx = x + Math.cos(a) * 12, ny = y + Math.sin(a) * 12;
+      g.strokeStyle = ['#5a3a36', '#6a4640', '#7a5048', '#4a4034'][r() * 4 | 0]; g.lineWidth = 2.2; g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+      g.fillStyle = ['#8a5a66', '#7a4a52', '#9a6a60', '#6a5a44'][r() * 4 | 0]; g.fillRect(nx - 2, ny - 2, 4, 4);
+      x = nx; y = ny; a += (r() - 0.5) * 0.5;
+    }
+  }
+  // 3: bracken, gone brown
+  for (let i = 0; i < 7; i++) {
+    let x = 896 + (r() - 0.5) * 60, y = 256, a = -Math.PI / 2 + (r() - 0.5) * 1.3;
+    const col = ['#9a6a34', '#b07a3a', '#8a5a2c', '#c08a44'][r() * 4 | 0];
+    for (let k = 0; k < 12; k++) {
+      const nx = x + Math.cos(a) * 15, ny = y + Math.sin(a) * 15, t = k / 12;
+      g.strokeStyle = col; g.lineWidth = 2.4; g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+      if (k > 2) for (const sd of [-1, 1]) { const pa = a + sd * 1.3, pl = 34 * (1 - t) + 6; g.lineWidth = 3; g.beginPath(); g.moveTo(nx, ny); g.lineTo(nx + Math.cos(pa) * pl, ny + Math.sin(pa) * pl + 6); g.stroke(); }
+      x = nx; y = ny; a += 0.09 * Math.sign(Math.cos(a) + 0.001);
+    }
+  }
+  return canvasTex(c);
+}
+const COVER_N = coarse ? 100 : 160, COVER_CELL = 0.55, COVER_R = COVER_N * COVER_CELL / 2 - 2;
+const coverU = { uOrigin: { value: new THREE.Vector2() } };
+const coverGeo = new THREE.InstancedBufferGeometry();
+{
+  const P = [], U = [], N = [], I = [];
+  for (const a of [0, Math.PI / 2]) {
+    const cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5, o = P.length / 3;
+    P.push(-cx, 0, -cz, cx, 0, cz, cx, 1, cz, -cx, 1, -cz); U.push(0, 0, 1, 0, 1, 1, 0, 1); N.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
+    I.push(o, o + 1, o + 2, o, o + 2, o + 3);
+  }
+  coverGeo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  coverGeo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+  coverGeo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  coverGeo.setIndex(I);
+  coverGeo.instanceCount = COVER_N * COVER_N;
+  coverGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+}
+const coverMat = new THREE.MeshLambertMaterial({ map: coverTexture(), alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide });
+coverMat.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, uniforms, coverU, { uTrans: { value: 0.4 } });
+  sh.vertexShader = `uniform vec3 uCamPos; uniform vec2 uOrigin; uniform sampler2D uForest; uniform vec4 uForestBox; varying vec3 vW; varying float vKeep;\n${NOISE}${LAND}${FOREST}` + sh.vertexShader
+    .replace('#include <beginnormal_vertex>', /* glsl */`
+  ivec2 cid = ivec2(floor(uOrigin / ${COVER_CELL.toFixed(2)})) + ivec2(gl_InstanceID % ${COVER_N}, gl_InstanceID / ${COVER_N});
+  vec2 pc = (vec2(cid) + vec2(hash2(cid * 3 + ivec2(11, 5)), hash2(cid * 7 + ivec2(2, 19)))) * ${COVER_CELL.toFixed(2)};
+  vec3 m = mapHeight(pc);
+  float fo = texture(uForest, (pc - uForestBox.xy) / uForestBox.zw).r, pd = pathDist(pc);
+  float kindR = hash2(cid + ivec2(71, 3));
+  float kind = fo > 0.3 ? (kindR < 0.55 ? 1.0 : kindR < 0.8 ? 3.0 : 0.0) : (kindR < 0.5 ? 0.0 : kindR < 0.8 ? 2.0 : 1.0);
+  float d = distance(vec3(pc.x, m.x, pc.y), uCamPos);
+  float chance = hash2(cid + ivec2(5, 311));
+  float clump = smoothstep(0.28, 0.72, vnoise(pc / 3.2 + vec2(4.0, 1.0))) * 0.85 + 0.15;
+  vKeep = (m.x > uWater + 1.0 && pd > 0.7 + 0.4 * chance && chance < 0.85 * clump * (1.0 - smoothstep(${(COVER_R * 0.5).toFixed(1)}, ${COVER_R.toFixed(1)}, d))) ? 1.0 : 0.0;
+  float sz = (kind == 0.0 ? 0.42 : kind == 1.0 ? 0.3 : kind == 2.0 ? 0.28 : 0.66) * (0.5 + 0.9 * hash2(cid + ivec2(13, 97))) * (0.55 + 0.45 * clump);
+  float ang = hash2(cid + ivec2(301, 7)) * 6.2831853;
+  vec3 objectNormal = vec3(0.0, 1.0, 0.0);`)
+    .replace('#include <begin_vertex>', /* glsl */`
+  float ca = cos(ang), sa = sin(ang);
+  vec3 lp = vec3(ca * position.x - sa * position.z, position.y, sa * position.x + ca * position.z) * vec3(sz * 1.3, sz, sz * 1.3);
+  vec3 transformed = vec3(pc.x, groundFrom(pc, m).x - 0.03, pc.y) + lp;
+  vW = transformed;`)
+    .replace('#include <fog_vertex>', `#include <fog_vertex>
+  vMapUv = vec2((kind + uv.x) * 0.25, uv.y);
+  if (vKeep < 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);`);
+  sh.fragmentShader = LIT_FRAG_HEAD + sh.fragmentShader
+    .replace('#include <alphatest_fragment>', 'diffuseColor.a *= 1.0 - uFade;\n  diffuseColor.rgb *= mix(0.42, 1.0, smoothstep(0.0, 0.65, vMapUv.y));\n#include <alphatest_fragment>')
+    .replace('#include <normal_fragment_begin>', 'float faceDirection = 1.0; vec3 normal = normalize(vNormal); vec3 nonPerturbedNormal = normal;')
+    .replace('#include <lights_fragment_begin>', LIT_AFTER_LIGHTS)
+    .replace('#include <fog_fragment>', LIT_END);
+};
+const cover = new THREE.Mesh(coverGeo, coverMat);
+cover.frustumCulled = false; cover.receiveShadow = true;
+scene.add(cover);
+function updateCover(c, f) {
+  cover.visible = f.y - ground(f.x, f.z) < 40 && !HIDE.includes('cover');
+  const half = COVER_N * COVER_CELL / 2;
+  coverU.uOrigin.value.set(Math.floor((c.x - half) / COVER_CELL) * COVER_CELL, Math.floor((c.z - half) / COVER_CELL) * COVER_CELL);
+}
+
+
+// ---------------------------------------------------------------- geese
+// Nine of them in a skein, crossing ahead of the camera from right to left while it rises over the
+// forest; each a body and two wings that beat (in the vertex shader), dark against the bright sky.
+const goose = new THREE.BufferGeometry();
+goose.setAttribute('position', new THREE.Float32BufferAttribute([
+  0, 0, 0.7, -0.12, 0, -0.5, 0.12, 0, -0.5,            // the body
+  -0.1, 0, 0.25, -1.6, 0, -0.1, -0.1, 0, -0.25,         // the wings
+  0.1, 0, 0.25, 0.1, 0, -0.25, 1.6, 0, -0.1,
+], 3));
+goose.computeVertexNormals();
+const geeseMat = new THREE.MeshLambertMaterial({ color: lin(40, 40, 38), side: THREE.DoubleSide });
+const flapU = { uFlap: { value: 0 } };
+geeseMat.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, uniforms, flapU, { uTrans: { value: 0 } });
+  sh.vertexShader = 'uniform float uFlap; varying vec3 vW;\n' + sh.vertexShader
+    .replace('#include <begin_vertex>', 'vec3 transformed = position; transformed.y += sin(uFlap + float(gl_InstanceID) * 0.9) * 0.55 * max(abs(position.x) - 0.1, 0.0);')
+    .replace('#include <project_vertex>', '#include <project_vertex>\n  vW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
+  sh.fragmentShader = LIT_FRAG_HEAD + sh.fragmentShader.replace('#include <fog_fragment>', LIT_END + '\n  gl_FragColor.a = 1.0 - uFade;');
+};
+const geese = new THREE.InstancedMesh(goose, geeseMat, 9);
+geese.frustumCulled = false;
+scene.add(geese);
+function updateGeese(p, f) {
+  const t = sstep(0.1, 0.52, p);
+  geese.visible = t > 0 && t < 1;
+  if (!geese.visible) return;
+  const rx = -f.hz, rz = f.hx;                          // the camera's right, on the ground
+  const c = along(camS(p) + 320), side = mix(260, -300, t);
+  const cx = c[0] + rx * side, cz = c[1] + rz * side, cy = f.y + 70 + 20 * t;
+  const yaw = Math.atan2(-rx, -rz);                     // flying to the left
+  for (let i = 0; i < 9; i++) {
+    const k = Math.ceil(i / 2), sgn = i % 2 ? 1 : -1;   // the V: one at the front, the others behind on either side
+    const bx = cx - (-rx) * k * 6 + (-rz) * sgn * k * 5, bz = cz - (-rz) * k * 6 - (-rx) * sgn * k * 5;
+    M4.compose(V.set(bx, cy - k * 0.8, bz), Q.setFromAxisAngle(UP, yaw), SC.set(2.2, 2.2, 2.2));
+    geese.setMatrixAt(i, M4);
+  }
+  geese.instanceMatrix.needsUpdate = true;
+  flapU.uFlap.value = p * 900;
 }
 
 // ---------------------------------------------------------------- the mountains' shadows
@@ -817,16 +1414,17 @@ function traceSunVis(t) {
 // tone mapping (ACES), a quiet grade (cool shadows, a matte floor like the photographs), grain,
 // and the paper coming through where the mask says so
 const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-  uniforms: { tScene: { value: rt.textures[0] }, tMask: { value: rt.textures[1] }, uTime: uniforms.uTime, uExposure: { value: 1.0 } },
+  uniforms: { tScene: { value: rt.texture }, uFade: uniforms.uFade, uTime: uniforms.uTime, uExposure: { value: 1.0 }, uShaft: { value: 0 }, tShaft: { value: null } },
   depthTest: false, depthWrite: false,
   vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
   fragmentShader: /* glsl */`
-    uniform sampler2D tScene, tMask; uniform float uTime, uExposure; varying vec2 vUv;
+    uniform sampler2D tScene, tShaft; uniform float uTime, uExposure, uFade, uShaft; varying vec2 vUv;
     vec3 aces(vec3 x) { const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
     vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
     float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
     void main() {
-      vec3 s = texture2D(tScene, vUv).rgb; float m = texture2D(tMask, vUv).r;
+      vec4 sc = texture2D(tScene, vUv); vec3 s = sc.rgb; float m = uFade > 0.0 ? sc.a : 1.0;
+      if (uShaft > 0.001) s += texture2D(tShaft, vUv).rgb * uShaft;
       vec3 c = aces(s * uExposure);
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, 0.92);
@@ -838,17 +1436,39 @@ const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMater
     }`,
 }));
 const postScene = new THREE.Scene(); postScene.add(post);
+// light shafts: the brightest sky (around the sun), smeared towards the sun, at a quarter of the size
+const shaftRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+post.material.uniforms.tShaft.value = shaftRT.texture;
+const shaftQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { tScene: { value: rt.texture }, uSunUV: { value: new THREE.Vector2() } },
+  depthTest: false, depthWrite: false,
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: /* glsl */`
+    uniform sampler2D tScene; uniform vec2 uSunUV; varying vec2 vUv;
+    float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+    void main() {
+      vec2 d = (uSunUV - vUv) / 28.0, uv = vUv + d * h12(gl_FragCoord.xy); float w = 1.0, acc = 0.0;
+      for (int i = 0; i < 28; i++) {
+        uv += d;
+        float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+        acc += max(dot(texture2D(tScene, uv).rgb, vec3(0.3, 0.5, 0.2)) - 1.6, 0.0) * w * inside; w *= 0.93;
+      }
+      gl_FragColor = vec4(vec3(1.0, 0.8, 0.55) * acc / 28.0, 1.0);
+    }`,
+}));
+const shaftScene = new THREE.Scene(); shaftScene.add(shaftQuad);
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 // ---------------------------------------------------------------- size
-let W = 0, H = 0, DPR = 1;
+let W = 0, H = 0, DPR = 1, quality = +(params.get('q') || 1);
 function resize() {
   const w = stage.clientWidth, h = stage.clientHeight;
-  const dpr = Math.min(devicePixelRatio || 1, coarse ? 1.25 : 1.5, Math.sqrt(3.2e6 / (w * h)));
+  const dpr = Math.min(devicePixelRatio || 1, coarse ? 1.1 : 1.3, Math.sqrt(2.4e6 / (w * h))) * quality;
   if (w === W && h === H && dpr === DPR) return false;
   W = w; H = h; DPR = dpr;
   renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
   rt.setSize(Math.round(W * DPR), Math.round(H * DPR));
+  shaftRT.setSize(Math.max(1, Math.round(W * DPR / 4)), Math.max(1, Math.round(H * DPR / 4)));
   const base = (coarse && W < H ? 62 : 52) * Math.PI / 180;
   const t = Math.tan(base / 2) / (W < H ? 0.8 : 1);
   cam.fov = 2 * Math.atan(t) * 180 / Math.PI; cam.aspect = W / H; cam.updateProjectionMatrix();
@@ -856,12 +1476,33 @@ function resize() {
 }
 
 // ---------------------------------------------------------------- the frame
+const gpuT = params.has('gputime') ? (() => {
+  const gl = renderer.getContext(), ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  if (!ext) return null;
+  const pending = [], done = (window.__gpu = []);
+  return {
+    begin() { const q = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); pending.push(q); },
+    end() {
+      gl.endQuery(ext.TIME_ELAPSED_EXT);
+      while (pending.length && gl.getQueryParameter(pending[0], gl.QUERY_RESULT_AVAILABLE)) {
+        const q = pending.shift();
+        if (!gl.getParameter(ext.GPU_DISJOINT_EXT)) done.push(gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6);
+        gl.deleteQuery(q);
+      }
+    },
+  };
+})() : null;
 function render(p) {
+  gpuT?.begin();
+  try { renderFrame(p); } finally { gpuT?.end(); }
+}
+function renderFrame(p) {
   const f = flight(p);
   cam.position.set(f.x, f.y, f.z);
+  cam.near = clamp((f.y - ground(f.x, f.z)) * 0.02 + 0.2, 0.2, 12); cam.far = 90000; cam.updateProjectionMatrix();
   const cp = Math.cos(f.pitch);
   cam.lookAt(f.x + f.hx * cp * 100, f.y + Math.sin(f.pitch) * 100, f.z + f.hz * cp * 100);
-  cam.updateMatrixWorld();
+  cam.updateMatrixWorld(); cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
   uniforms.uCamPos.value.copy(cam.position);
   sky.position.copy(cam.position);
   // the shadow box: around the camera and ahead of it, snapped to its texels so the shadows do not crawl
@@ -874,12 +1515,27 @@ function render(p) {
   uniforms.uLines.value = sstep(0.8, 0.9, p) * (1 - sstep(0.92, 0.955, p));
   uniforms.uMist.value = 1 - 0.6 * sstep(0.7, 0.9, p);
   updateTerrain(cam.position);
+  updateHikers(p);
+  updateCover(cam.position, f);
+  updateGeese(p, f);
+  if (hero) hero.visible = p > 0.3;
+  uniforms.uHeroOut.value = sstep(0.835, 0.875, p);
+  post.material.uniforms.uExposure.value = 1.0 + 0.4 * (1 - sstep(0.04, 0.3, p));
+  {
+    PV3.copy(cam.position).addScaledVector(SUN, 20000).project(cam);
+    const facing = cam.getWorldDirection(FWD).dot(SUN) > 0.05;
+    shaftQuad.material.uniforms.uSunUV.value.set((PV3.x + 1) / 2, (PV3.y + 1) / 2);
+    const off = Math.max(Math.abs(PV3.x), Math.abs(PV3.y));
+    post.material.uniforms.uShaft.value = facing && !HIDE.includes('shafts') ? 0.22 * (1 - sstep(0.16, 0.4, p)) * (1 - sstep(1.1, 1.6, off)) : 0;
+  }
   updateNear(cam.position);
   updateRings(cam.position);
   renderer.setRenderTarget(rt);
   renderer.render(scene, cam);
+  if (post.material.uniforms.uShaft.value > 0.001) { renderer.setRenderTarget(shaftRT); renderer.render(shaftScene, postCam); }
   renderer.setRenderTarget(null);
   renderer.render(postScene, postCam);
+  drawMark(p);
 }
 
 // ---------------------------------------------------------------- captions and the title (as intro.js)
@@ -895,7 +1551,7 @@ function overlay(p) {
 }
 
 // ---------------------------------------------------------------- the loop (as intro.js)
-let pShown = 0, target = 0, last = performance.now(), running = false, visible = true, drawn = -1, ready = false;
+let pShown = 0, target = 0, last = performance.now(), running = false, visible = true, drawn = -1, ready = false, lastRender = 0, slow = 0, fast = 0;
 function scrollProgress() {
   const span = (section.offsetHeight - innerHeight) * 0.96;
   return span > 0 ? clamp(-section.getBoundingClientRect().top / span) : 0;
@@ -922,6 +1578,14 @@ function frame(now) {
   const resized = resize();
   if (ready && (resized || Math.abs(pShown - drawn) > 1e-5)) {
     const t0 = performance.now();
+    if (DEBUG_P == null && !params.has('q')) {
+      const iv = now - lastRender; lastRender = now;
+      if (iv < 120) {
+        if (iv > 22) { slow++; fast = 0; } else if (iv < 15.5) { fast++; slow = Math.max(0, slow - 1); }
+        if (slow > 6 && quality > 0.6) { quality = Math.max(0.6, quality * 0.88); slow = 0; }
+        if (fast > 120 && quality < 1) { quality = Math.min(1, quality * 1.06); fast = 0; }
+      }
+    }
     uniforms.uTime.value = now / 1000;
     render(pShown);
     overlay(pShown);
@@ -933,15 +1597,16 @@ function frame(now) {
 function request() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } }
 
 // for the tuning scripts: render p and wait for the GPU; ?hide=terrain,near,rings,sky leaves parts out
-const HIDE = (params.get('hide') || '').split(',');
 window.__introBench = (p) => {
   terrain.visible = !HIDE.includes('terrain'); sky.visible = !HIDE.includes('sky');
-  near.forEach((m) => { m.visible = !HIDE.includes('near'); }); rings.forEach((m) => { m.visible = !HIDE.includes('rings'); });
+  near.forEach((m) => { m.visible = m.userData.pre.visible = !HIDE.includes('near'); }); 
   sunLight.castShadow = !HIDE.includes('shadow');
   const t0 = performance.now(); render(p); const t1 = performance.now();
   const gl = renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
   return { cpu: t1 - t0, total: performance.now() - t0 };
 };
+window.__introBench.raw = (p) => render(p);
+window.__introBench.sync = () => { const gl = renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); };
 root.classList.add('has-webgl');
 target = pShown = DEBUG_P ?? scrollProgress();
 state();
@@ -953,6 +1618,13 @@ HC.terrain(canvas.dataset.src).then((t) => {
   tex.minFilter = tex.magFilter = THREE.NearestFilter; tex.needsUpdate = true;
   uniforms.uHeight.value = tex; uniforms.uRes.value.set(t.w, t.h);
   uniforms.uSunVis.value = traceSunVis(t);
+  hero = new THREE.Mesh(heroGeometry(), heroMat); hero.frustumCulled = false; scene.add(hero);
+  const t0 = performance.now();
+  placeFar(t).then((bufs) => {
+    bufs.forEach((tiles, i) => tiles.forEach(({ x, z, data }) => { const m = ringMesh(data, RINGS[i], x, z, RINGS[i].tile); rings.push(m); scene.add(m); }));
+    window.__introFar = { ms: Math.round(performance.now() - t0), n: bufs.map((t) => t.reduce((a, q) => a + q.data.length / 5, 0)), tiles: rings.length };
+    drawn = -1; request();
+  });
   resize();
   bake();
   ready = true; drawn = -1; request();
