@@ -22,40 +22,45 @@
       "high_m": 83,
       "highName": "Tyresta ridge",
       "group": 24,
-      "terrain": "Old-growth pine, bare granite, the fire field of 1999, bog boardwalks",
+      "terrain": "Old pine forest, granite ridges, the area burnt in 1999, boardwalks over bogs",
       "transport": "Bus 834 from Gullmarsplan, one hour",
       "climate": "Early March: −4 to +3 °C, frozen lakes, 11 hours of daylight",
-      "note": "Old-growth pine, bare granite and a forest regrowing since the fire of 1999. One hour from the city by bus, and a good first trip.",
+      "note": "A day hike through Tyresta National Park, one hour from central Stockholm by bus. Old pine forest, granite ridges and quiet lakes, and a good first trip with the club.",
       "log": [
         [
           "07:40",
-          "Gullmarsplan. Twenty-four at the bus stop, three with new boots."
+          "Meeting point at Gullmarsplan; bus 834 towards Tyresta."
         ],
         [
           "09:05",
-          "Tyresta village. Map, water, first layers off."
+          "Start at Tyresta village, by the national park entrance."
         ],
         [
           "12:30",
-          "Lunch on the granite above Årsjön, still frozen at the edges."
+          "Lunch break on the rocks above Årsjön."
         ],
         [
           "15:50",
-          "Back at the village. 16 km, nobody lost."
+          "Back at the village after 16 km."
         ]
       ],
       "images": {
-        "hero": "tyresta-pines",
+        "hero": "club-lake-cliff",
         "gallery": [
           [
-            "tyresta-pines",
+            "club-lake-cliff",
             "001.1",
-            "Old pine above the bedrock."
+            "The group above the lake."
           ],
           [
-            "tyresta-stream",
+            "club-spruce-file",
             "001.2",
-            "Meltwater, early March."
+            "On the trail through the spruce forest."
+          ],
+          [
+            "forest-pines-lake",
+            "001.3",
+            "Pine forest by the bog."
           ]
         ]
       }
@@ -84,7 +89,7 @@
       "terrain": "Moraine, scree, the Vierranvárri shoulder, a snow ridge to the top",
       "transport": "Night train to Kiruna, bus to Nikkaluokta, 19 km on foot to the mountain station",
       "climate": "Late August: 0 to +12 °C at the station, below zero on the summit ridge, wind",
-      "note": "Sweden’s highest summit, by the western route. Up before four, back at the mountain station by evening.",
+      "note": "Four days to Sweden’s highest mountain, with the summit day on the western route from the Kebnekaise mountain station.",
       "map": "kebnekaise",
       "relief": "kebnekaise",
       "route": [
@@ -112,19 +117,19 @@
       "log": [
         [
           "03:50",
-          "Kebnekaise mountain station, 690 m. Headlamps, porridge, silence."
+          "Departure from the Kebnekaise mountain station (690 m)."
         ],
         [
           "07:10",
-          "Vierranvárri, 1,711 m. The first view of the ridge."
+          "Vierranvárri (1,711 m) and the first view of the summit ridge."
         ],
         [
           "10:40",
-          "The north top, 2,097 m. Cloud, then no cloud."
+          "The summit, 2,097 m."
         ],
         [
           "18:20",
-          "Back at the station. 18 km, 1,900 m of ascent."
+          "Back at the mountain station after 18 km and 1,900 m of ascent."
         ]
       ],
       "images": {
@@ -171,23 +176,23 @@
       "terrain": "Ice-polished granite shore, heath, pine, the old pilot station",
       "transport": "Commuter train to Nynäshamn, bus to Ankarudden, boat to Öja",
       "climate": "Mid-September: +9 to +16 °C, westerlies, cold water",
-      "note": "Öja, the southernmost island of the archipelago. Granite polished by the ice age, a night in the pilot station, Sweden’s oldest lighthouse.",
+      "note": "A two-day coastal hike on Öja (Landsort), the southernmost island of the Stockholm archipelago, with a night at the old pilot station by Sweden’s oldest lighthouse.",
       "log": [
         [
           "08:15",
-          "Nynäshamn. Rain in the forecast, none on the water."
+          "Commuter train to Nynäshamn."
         ],
         [
           "11:00",
-          "Öja. Round the island clockwise, on the rock."
+          "Arrival on Öja and a walk around the island."
         ],
         [
           "21:30",
-          "The pilot station. The lighthouse turns every nine seconds."
+          "Overnight stay at the pilot station."
         ],
         [
           "14:40",
-          "The boat back. 11 km, one swim, very short."
+          "Boat back to the mainland after 11 km."
         ]
       ],
       "images": {
@@ -230,11 +235,11 @@
       "placesLeft": 5,
       "closes": "3 October",
       "terrain": "Birch forest, the Abisko canyon, open fell, the Njullá ridge",
-      "transport": "Night train from Stockholm C to Abisko Turiststation, 1,002 km north",
-      "climate": "Mid-October: −5 to +4 °C, first snow on the tops, about nine hours of daylight, aurora on clear nights",
+      "transport": "Night train from Stockholm Central to Abisko Turiststation, about 17 hours",
+      "climate": "Mid-October: −5 to +4 °C, the first snow on the mountains, about nine hours of daylight, northern lights on clear nights",
       "cost": "Train, huts and food at cost, listed when registration closes",
       "leaders": "Two club trip leaders; a certified guide for the Njullá ridge",
-      "note": "The first expedition this far north. Birch forest in its last colour, the first snow above the treeline, and the dark coming early.",
+      "note": "Three days in Abisko National Park in October: birch forest, the Abisko valley and the Njullá ridge, with the first snow on the mountains.",
       "map": "abisko",
       "relief": "abisko",
       "route": [
@@ -282,7 +287,7 @@
             0,
             3
           ],
-          "text": "Off the night train at eleven. Through the canyon and up Kungsleden along the river to the hut at Abiskojaure."
+          "text": "We arrive on the morning train, walk through the Abisko canyon and follow Kungsleden along the river to the Abiskojaure mountain hut."
         },
         {
           "day": "Day 2",
@@ -294,11 +299,11 @@
             3,
             5
           ],
-          "text": "Leave the trail. North over open fell above the birches, camp or hut depending on the snow line."
+          "text": "We leave the marked trail and cross the open fell above the tree line. We stay in a hut or in tents, depending on the conditions."
         },
         {
           "day": "Day 3",
-          "title": "Njullá, then the train",
+          "title": "Njullá and the journey home",
           "from": "Njullá",
           "to": "Abisko Turiststation",
           "km": 9,
@@ -306,7 +311,7 @@
             5,
             7
           ],
-          "text": "The ridge to the top at 1,169 m with the guide, down to the station for the evening train south."
+          "text": "With a certified guide we climb the Njullá ridge (1,169 m), then walk down to Abisko for the evening train to Stockholm."
         }
       ],
       "packing": [
@@ -367,12 +372,12 @@
       "highName": "Sarvesvágge pass",
       "group": 8,
       "opens": "1 December",
-      "terrain": "No trails, no huts, no signal. Frozen valleys and passes on ski",
+      "terrain": "No marked trails or huts: frozen valleys and mountain passes on skis",
       "transport": "Night train to Gällivare, bus to Kvikkjokk, then on ski",
       "climate": "March: −20 to −2 °C, long light, storms that last days",
       "cost": "Listed in the dossier",
-      "leaders": "Two certified mountain leaders, ski-touring experience required",
-      "note": "A week on ski through Sarek in March, with tents and sledges. For members who have done a winter trip with the club before.",
+      "leaders": "Two certified mountain leaders; ski touring experience required",
+      "note": "A week-long ski tour through Sarek National Park in March, with tents and pulks. For members who have joined a winter trip with the club before.",
       "images": {
         "hero": "expedition-tracks",
         "gallery": [
@@ -394,12 +399,12 @@
     {
       "key": "hiking",
       "name": "Hiking",
-      "img": "abisko-moon-ridge",
+      "img": "club-pine-trail",
       "season": "All year",
       "level": "Open to all",
       "group": "10–25",
       "equipment": "Boots, shell, a day pack",
-      "text": "Day trails on Sörmlandsleden and Roslagsleden, an hour from the city. Every other weekend, all year.",
+      "text": "Day hikes on trails such as Sörmlandsleden and Roslagsleden, within an hour of Stockholm. Regular trips throughout the year.",
       "past": [
         "001",
         "003"
@@ -413,7 +418,7 @@
       "level": "Belay course provided",
       "group": "6–12",
       "equipment": "Harness and shoes, lent by the club",
-      "text": "Indoor walls through the dark months, granite crags south of Stockholm from May. Belay courses for beginners.",
+      "text": "Indoor climbing during the darker months and outdoor climbing on granite south of Stockholm from May. Belay courses are offered for beginners.",
       "past": []
     },
     {
@@ -424,7 +429,7 @@
       "level": "Experience required",
       "group": "4–12",
       "equipment": "Crampons, axe, helmet, harness",
-      "text": "Glaciers, ropes and early starts. Always with certified mountain guides, never more than six to a rope team.",
+      "text": "Glacier travel and summit trips in the Swedish mountains, always led by certified mountain guides, with at most six people per rope team.",
       "past": [
         "002"
       ]
@@ -432,12 +437,12 @@
     {
       "key": "winter",
       "name": "Winter",
-      "img": "winter-valley",
+      "img": "winter-blue-hour",
       "season": "December – April",
       "level": "Open to all",
       "group": "8–16",
       "equipment": "Snowshoes or skis, a thermos",
-      "text": "Snowshoes, ski touring and frozen lakes. Short days, long light, very cold coffee.",
+      "text": "Snowshoeing, ski touring and walks on frozen lakes during the winter months.",
       "past": [
         "005"
       ]
@@ -445,12 +450,12 @@
     {
       "key": "expeditions",
       "name": "Expeditions",
-      "img": "expedition-tracks",
+      "img": "winter-fells",
       "season": "Twice a year",
-      "level": "Selected by dossier",
+      "level": "Varies by trip",
       "group": "8–16",
-      "equipment": "The dossier lists it",
-      "text": "Several days, far north. Night trains, mountain huts, no signal. Two or three a year, numbered.",
+      "equipment": "Listed on each trip page",
+      "text": "Multi-day trips to the Swedish mountains, travelling by night train and staying in mountain huts or tents. Two to three trips a year.",
       "past": [
         "002",
         "004",

@@ -132,8 +132,9 @@ if (north) {
   const head = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   head.setAttribute('class', 'scandi-head'); head.innerHTML = '<circle r="11"/><circle r="3.5"/>';
   svg.append(head);
-  const kmEl = document.querySelector('[data-north-km]'), latEl = document.querySelector('[data-north-lat]');
-  const KM = +north.dataset.km, L0 = +north.dataset.lat0, L1 = +north.dataset.lat1;
+  const kmEl = document.querySelector('[data-north-km]');
+  const KM = +north.dataset.km;
+  const stops = [...north.querySelectorAll('.scandi-stop')].map((g) => ({ g, t: +g.dataset.t }));
   const scene = north.closest('[data-scene]');
   let last = -1;
   HC.onFrame(() => {
@@ -144,9 +145,36 @@ if (north) {
     path.style.strokeDashoffset = (1 - d).toFixed(4);
     const pt = path.getPointAtLength(d * len);
     head.setAttribute('transform', `translate(${pt.x.toFixed(1)} ${pt.y.toFixed(1)})`);
-    kmEl.textContent = Math.round(d * KM).toLocaleString('en-US');
-    latEl.textContent = `${(L0 + (L1 - L0) * d).toFixed(2)}° N`;
+    kmEl.textContent = (Math.round(d * KM / 10) * 10).toLocaleString('en-US');
+    for (const st of stops) st.g.classList.toggle('is-passed', d >= st.t);   // the stations light up as the train passes
     north.classList.toggle('is-arrived', d > 0.995);
+    return false;
+  });
+}
+
+// ---------------------------------------------------------------- what we do (home): one activity at a time
+const disc = document.querySelector('.home-disc[data-scene]');
+if (disc) {
+  const items = [...disc.querySelectorAll('.disc-words li')], shots = [...disc.querySelectorAll('.disc-shot')];
+  let shown = -1, hover = -1;
+  const show = (k) => {
+    if (k === shown) return;
+    shots.forEach((s, i) => { s.classList.toggle('was-on', i === shown); s.classList.toggle('is-on', i === k); });
+    items.forEach((li, i) => li.classList.toggle('is-on', i === k));
+    shown = k;
+  };
+  items.forEach((li, i) => {
+    li.addEventListener('pointerenter', () => { hover = i; show(i); });
+    li.addEventListener('pointerleave', () => { hover = -1; HC.wake(); });
+    li.querySelector('a').addEventListener('focus', () => { hover = i; show(i); });
+    // the photograph travels to the activity's page (a cross-document view transition by name)
+    li.querySelector('a').addEventListener('click', () => { const img = shots[i].querySelector('img'); if (img) img.style.viewTransitionName = shots[i].dataset.vt; });
+  });
+  show(0);
+  HC.onFrame(() => {
+    if (!visibleScenes.has(disc) || hover >= 0) return false;
+    const p = progress(disc);
+    show(Math.min(items.length - 1, Math.floor(clamp((p - 0.04) / 0.9) * items.length)));
     return false;
   });
 }

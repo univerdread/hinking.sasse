@@ -264,6 +264,35 @@ def terrain():
     save_derived(d)
 
 
+# Heightmaps only (no contour maps), for the destinations model on the home page. Same encoding.
+RELIEFS = {
+    "tyresta":     ((59.140, 18.215, 59.225, 18.385), 13),
+    "archipelago": ((58.745, 17.780, 58.845, 17.970), 13),
+    "sarek":       ((67.215, 17.500, 67.345, 17.840), 12),
+}
+
+
+def reliefs():
+    TERRAIN.mkdir(parents=True, exist_ok=True)
+    d = derived(); d.setdefault("terrain", {})
+    for name, (bbox, z) in RELIEFS.items():
+        Z = np.maximum(smooth_dem(dem(bbox, z)), -1.0)
+        if bbox[0] < 60:                                   # south of 60° N the source is coarser: soften its steps
+            from scipy.ndimage import gaussian_filter
+            Z = gaussian_filter(Z, 1.6)
+        im = Image.fromarray(Z.astype(np.float32), "F").resize((384, 384), Image.BILINEAR)
+        A = np.asarray(im, np.float64)
+        lo, hi = float(A.min()), float(A.max())
+        q = np.round((A - lo) / (hi - lo) * 65535).astype(np.uint32)
+        rgb = np.stack([q >> 8, q & 255, np.zeros_like(q)], -1).astype(np.uint8)
+        Image.fromarray(rgb, "RGB").save(TERRAIN / f"{name}.png", optimize=True)
+        lat0, lon0, lat1, lon1 = bbox
+        w_km = (lon1 - lon0) * 111.32 * math.cos(math.radians((lat0 + lat1) / 2)); h_km = (lat1 - lat0) * 110.57
+        d["terrain"][name] = dict(min=round(lo), max=round(hi), bbox=list(bbox), km=[round(w_km, 2), round(h_km, 2)])
+        print("relief", name, f"{lo:.0f}-{hi:.0f} m", f"{w_km:.1f}x{h_km:.1f} km")
+    save_derived(d)
+
+
 def hav(a, b):
     la1, lo1, la2, lo2 = map(math.radians, (*a, *b))
     h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
@@ -387,6 +416,46 @@ def scandi():
         lat={L: [round(v, 1) for v in to_svg(L, 4)] for L in (55, 60, 65, 70)})
     save_derived(d)
     print("scandinavia", W, H, len(svg) // 1024, "KB")
+
+
+# The night train from Stockholm to Abisko, through the stations it runs through (approximate positions,
+# enough at the map's scale): Ostkustbanan to Gävle, Norra stambanan to Ånge, Stambanan genom övre
+# Norrland to Boden, and Malmbanan by Gällivare and Kiruna along Torneträsk. Stored with the map.
+RAIL = [("Stockholm C", 59.3304, 18.0592, 1), ("Märsta", 59.6197, 17.8570, 0), ("Uppsala", 59.8583, 17.6460, 1), ("Tierp", 60.3440, 17.5150, 0),
+        ("Gävle", 60.6750, 17.1500, 1), ("Ockelbo", 60.8900, 16.7200, 0), ("Bollnäs", 61.3480, 16.3920, 0), ("Ljusdal", 61.8290, 16.0840, 0),
+        ("Ånge", 62.5240, 15.6590, 1), ("Bräcke", 62.7500, 15.4200, 0), ("Långsele", 63.1790, 17.0700, 0), ("Mellansel", 63.4340, 18.3300, 0),
+        ("Vännäs", 63.9080, 19.7510, 0), ("Vindeln", 64.2020, 19.7190, 0), ("Bastuträsk", 64.7910, 20.0390, 0), ("Jörn", 65.0560, 20.0290, 0),
+        ("Älvsbyn", 65.6760, 21.0000, 0), ("Boden", 65.8260, 21.6900, 1), ("Murjek", 66.4820, 20.8830, 0), ("Nattavaara", 66.7540, 20.9500, 0),
+        ("Gällivare", 67.1330, 20.6560, 1), ("Kiruna", 67.8570, 20.2050, 1), ("Torneträsk", 68.2200, 19.7200, 0), ("Abisko", 68.3580, 18.7840, 1)]
+
+
+def rail():
+    X0, X1 = -560.0, 900.0; Y0, Y1 = float(tm(54.5, 15)[1]), float(tm(71.3, 15)[1])
+    W = 1000; H = int(round(W * (Y1 - Y0) / (X1 - X0)))
+    to_svg = lambda la, lo: (float((tm(la, lo)[0] - X0) / (X1 - X0) * W), float((Y1 - tm(la, lo)[1]) / (Y1 - Y0) * H))
+    P = np.array([(la, lo) for _, la, lo, _ in RAIL])
+    # a smooth line through the stations (centripetal Catmull-Rom would be overkill at this scale)
+    dense, stop_i = [], []
+    for k in range(len(P) - 1):
+        p0, p1, p2, p3 = P[max(k - 1, 0)], P[k], P[k + 1], P[min(k + 2, len(P) - 1)]
+        stop_i.append(len(dense))
+        for t in np.linspace(0, 1, 12, endpoint=False):
+            t2, t3 = t * t, t * t * t
+            dense.append(0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
+    stop_i.append(len(dense)); dense.append(P[-1])
+    dense = np.array(dense)
+    seg = [hav(dense[i], dense[i + 1]) for i in range(len(dense) - 1)]
+    cum = np.concatenate([[0], np.cumsum(seg)]); total = float(cum[-1])
+    xy = [to_svg(la, lo) for la, lo in dense]
+    arctic = next(i for i in range(len(dense)) if dense[i][0] >= 66.5634)
+    d = derived()
+    d["scandinavia"]["rail"] = dict(
+        path=[[round(x, 1), round(y, 1)] for x, y in xy], km=round(total),
+        stops=[dict(name=n, x=round(xy[stop_i[i]][0], 1), y=round(xy[stop_i[i]][1], 1), t=round(float(cum[stop_i[i]] / total), 4), label=bool(lab))
+               for i, (n, _, _, lab) in enumerate(RAIL)],
+        arctic=dict(t=round(float(cum[arctic] / total), 4), line=[[round(v, 1) for v in to_svg(66.5634, lo)] for lo in (8, 12, 16, 20, 24, 28, 32)]))
+    save_derived(d)
+    print("rail", round(total), "km,", len(xy), "points, Arctic Circle at", round(float(cum[arctic] / total), 3))
 
 
 if __name__ == "__main__":

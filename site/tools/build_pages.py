@@ -58,6 +58,13 @@ def img(d, name, alt, sizes="100vw", cls="", eager=False, vt=None, w=None):
             f'decoding="async" alt="{esc(alt)}"{vt_s}>')
 
 
+def logo(d, name, cls, tone="paper"):
+    """SASSE's and SSE's own logos, from their own files, in paper (on dark) or ink (on light)."""
+    alt = {"sasse-logo": "SASSE, the Student Association at the Stockholm School of Economics", "sse-logo": "Stockholm School of Economics"}[name]
+    vb = {"sasse-logo": (120, 95), "sse-logo": (288, 57)}[name]
+    return f'<img class="{cls}" src="{u(d)}site/assets/img/partners/{name}-{tone}.svg" width="{vb[0]}" height="{vb[1]}" alt="{alt}" loading="lazy">'
+
+
 def sprite():
     sym = []
     for sid, f in [("mark", "logo-mark"), ("wordmark", "logo-wordmark"), ("lockup", "logo-vertical"), ("lockup-h", "logo-horizontal")]:
@@ -72,8 +79,14 @@ SPRITE = sprite()
 NAV = [("expeditions/", "Expeditions"), ("archive/", "Archive"), ("activities/", "Activities"), ("the-club/", "The Club"), ("join/", "Join")]
 
 
+def ver(rel):
+    """A short hash of an asset's content, appended to its URL so a browser never keeps an old copy."""
+    import hashlib
+    return hashlib.sha1((SITE / "assets" / rel).read_bytes()).hexdigest()[:8]
+
+
 def head(d, title, desc, page, scripts=()):
-    js = "".join(f'<script defer src="{u(d)}site/assets/js/{s}.js"></script>' for s in dict.fromkeys(("site", "contours", *scripts)))
+    js = "".join(f'<script defer src="{u(d)}site/assets/js/{s}.js?v={ver(f"js/{s}.js")}"></script>' for s in dict.fromkeys(("site", "contours", *scripts)))
     return f"""<!doctype html>
 <html lang="en" class="page-{page}">
 <head>
@@ -88,7 +101,7 @@ def head(d, title, desc, page, scripts=()):
 <link rel="icon" href="{u(d)}site/assets/img/logo-mark.svg" type="image/svg+xml">
 <link rel="preload" href="{u(d)}site/assets/fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="{u(d)}site/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="{u(d)}site/assets/css/site.css">
+<link rel="stylesheet" href="{u(d)}site/assets/css/site.css?v={ver("css/site.css")}">
 <script>document.documentElement.classList.add('js');</script>
 {js}
 </head>
@@ -111,7 +124,7 @@ def header(d, current):
   <nav class="nav-links" id="nav-links" aria-label="Main">
     <canvas class="nav-contours" data-contours="abisko" data-alpha="0.10" aria-hidden="true"></canvas>
     {links}
-    <a class="nav-next" href="{u(d, 'expeditions/' + nxt['slug'] + '/')}"><span class="label">Next · Exp. {nxt['no']}</span><span class="nav-next-name">{nxt['name']}</span><span class="label tnum">{coords(nxt, ' · ')}</span></a>
+    <a class="nav-next" href="{u(d, 'expeditions/' + nxt['slug'] + '/')}"><span class="label">Next · Exp. {nxt['no']}</span><span class="nav-next-name">{nxt['name']}</span><span class="label tnum">{nxt['dates']}</span></a>
   </nav>
   <a class="nav-sasse" href="https://www.sasse.se" rel="noopener">SASSE<span aria-hidden="true">↗</span></a>
   <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links"><span>Menu</span></button>
@@ -123,8 +136,12 @@ def credits_html():
     lic = {"CC BY-SA 4.0": "https://creativecommons.org/licenses/by-sa/4.0/", "CC BY-SA 3.0": "https://creativecommons.org/licenses/by-sa/3.0/",
            "CC BY 2.0": "https://creativecommons.org/licenses/by/2.0/", "CC BY 4.0": "https://creativecommons.org/licenses/by/4.0/",
            "CC0": "https://creativecommons.org/publicdomain/zero/1.0/", "Public domain": "https://en.wikipedia.org/wiki/Public_domain"}
+    # only the photographs the site shows: the expeditions' and the activities' (the club's own need none)
+    used = {e["images"]["hero"] for e in EXP} | {n for e in EXP for n, *_ in e["images"]["gallery"]} | {a["img"] for a in ACT}
     items = []
-    for c in json.loads((SITE / "tools/credits.json").read_text()).values():
+    for name, c in json.loads((SITE / "tools/credits.json").read_text()).items():
+        if name not in used:
+            continue
         title = c["title"].removeprefix("File:").rsplit(".", 1)[0]
         items.append(f'<li><a href="{esc(c["page"])}" rel="noopener">{esc(title)}</a>, {esc(c["artist"] or "unknown")}, '
                      f'<a href="{lic[c["lic"]]}" rel="noopener">{c["lic"]}</a>. Graded and cropped.</li>')
@@ -136,17 +153,21 @@ CREDITS = credits_html()
 
 def footer(d):
     nxt = next(e for e in EXP if e["status"] == "registering")
-    return f"""<footer class="footer" data-theme="navy">
+    return f"""<footer class="footer" data-theme="pine">
   <div class="footer-top">
     <svg class="footer-logo" viewBox="0 0 304.4 100" role="img" aria-label="Hiking Club"><use href="#lockup-h"/></svg>
     <p class="footer-line">Leave no trace.</p>
   </div>
   <div class="footer-cols">
     <div><p class="label">Hiking Club</p><p>A student club of SASSE, the Student Association at the Stockholm School of Economics.</p></div>
-    <div><p class="label">Address</p><p>Stockholm School of Economics<br>Sveavägen 65, Stockholm<br><span class="tnum">{deg(SSE[0], 'N', 'S')} {deg(SSE[1], 'E', 'W')}</span></p></div>
+    <div><p class="label">Address</p><p>Stockholm School of Economics<br>Sveavägen 65<br>113 83 Stockholm</p></div>
     <div><p class="label">Site</p><p>{"<br>".join(f'<a class="link" href="{u(d, p)}">{t}</a>' for p, t in NAV)}</p></div>
     <div><p class="label">Elsewhere</p><p><a class="link" href="https://www.sasse.se" rel="noopener">SASSE</a><br><a class="link" href="https://www.hhs.se" rel="noopener">Stockholm School of Economics</a></p>
-      <details class="credits"><summary class="label">Photo credits</summary>{CREDITS}<p class="small">Contours and terrain from Mapzen Terrain Tiles on AWS Open Data.</p></details></div>
+      <details class="credits"><summary class="label">Photo credits</summary>{CREDITS}<p class="small">Photographs of the club by its members. Contours and terrain from Mapzen Terrain Tiles on AWS Open Data. The SASSE and Stockholm School of Economics logos belong to their owners.</p></details></div>
+  </div>
+  <div class="footer-orgs">
+    <a class="footer-org" href="https://www.sasse.se" rel="noopener">{logo(d, "sasse-logo", "footer-sasse")}</a>
+    <a class="footer-org" href="https://www.hhs.se" rel="noopener">{logo(d, "sse-logo", "footer-sse")}</a>
   </div>
   <div class="footer-bottom label"><span>© 2026 Hiking Club</span><a href="{u(d, 'expeditions/' + nxt['slug'] + '/')}" class="tnum">Exp. {nxt['no']} — {nxt['name']} — {nxt['dates']}</a></div>
 </footer>
@@ -185,7 +206,7 @@ def log_row(d, e, cls=""):
     <span class="log-img" aria-hidden="true" style="background-image: url({u(d)}site/assets/img/{e['images']['hero']}-960.webp)"></span>
     <span class="log-no tnum">{e['no']}</span>
     <span class="log-name">{esc(e['name'])}</span>
-    <span class="log-coord tnum">{coords(e)}</span>
+    <span class="log-coord">{esc(e["region"])}</span>
     <span class="log-alt tnum">+{e['high_m']:,} m</span>
     <span class="log-cat">{esc(e['category'])}</span>
     <span class="log-date tnum">{e['short']}</span>
@@ -195,15 +216,24 @@ def log_row(d, e, cls=""):
 
 
 # Scandinavia: the base map is an <img> (cached across pages), routes and markers an inline overlay
-def scandi_overlay(d, focus=None, routes=True, mode="north"):
+RAIL_KM = 1440   # Stockholm C – Abisko by rail: about 1,500 km to Narvik, less the 58 km from Abisko
+
+
+def scandi_overlay(d, focus=None, routes=True, mode="north", rail=False):
     S = DER["scandinavia"]; w, h = S["w"], S["h"]
     sx, sy = S["stockholm"]
     out = [f'<svg class="scandi-overlay" viewBox="0 0 {w} {h}" aria-hidden="true">']
-    for L, (x, y) in S["lat"].items():
-        out.append(f'<text class="scandi-lat" x="{x + 8}" y="{y - 6}">{L}° N</text>')
+    if rail:
+        R = S["rail"]
+        out.append(f'<path class="scandi-arctic" d="M{" L".join(f"{x} {y}" for x, y in R["arctic"]["line"])}"/>'
+                   f'<text class="scandi-arctic-label" x="{R["arctic"]["line"][1][0] + 6}" y="{R["arctic"]["line"][1][1] - 8}">Arctic Circle</text>')
+        out.append(f'<path class="scandi-route scandi-rail is-focus" pathLength="1" d="M{" L".join(f"{x} {y}" for x, y in R["path"])}"/>')
+        for st in R["stops"][1:-1]:
+            if st["label"]:
+                out.append(f'<g class="scandi-stop" data-t="{st["t"]}" transform="translate({st["x"]} {st["y"]})"><circle r="2.6"/><text x="-10" y="4" text-anchor="end">{esc(st["name"])}</text></g>')
     for e in EXP:
         x, y = S["points"][e["slug"]]
-        if routes and (focus is None or e["no"] == focus):
+        if routes and not rail and (focus is None or e["no"] == focus):
             # a quiet arc bowing west, like a line drawn with a ruler that gave way
             mx, my = (sx + x) / 2, (sy + y) / 2
             dx, dy = x - sx, y - sy
@@ -219,11 +249,12 @@ def scandi_overlay(d, focus=None, routes=True, mode="north"):
     return "".join(out)
 
 
-def scandi(d, focus=None, routes=True, cls=""):
+def scandi(d, focus=None, routes=True, cls="", rail=False):
     S = DER["scandinavia"]
+    alt = "Map of Sweden with the night train's route from Stockholm to Abisko." if rail else "Map of Scandinavia: coastline and mountain contours."
     return (f'<div class="scandi {cls}" style="aspect-ratio: {S["w"]} / {S["h"]}">'
-            f'<img class="scandi-base" src="{u(d)}site/assets/map/scandinavia.svg" width="{S["w"]}" height="{S["h"]}" loading="lazy" alt="Map of Scandinavia: coastline and mountain contours.">'
-            f'{scandi_overlay(d, focus, routes)}</div>')
+            f'<img class="scandi-base" src="{u(d)}site/assets/map/scandinavia.svg" width="{S["w"]}" height="{S["h"]}" loading="lazy" alt="{alt}">'
+            f'{scandi_overlay(d, focus, routes, rail=rail)}</div>')
 
 
 def relief(d, name, route=None, mode="object", label=True):
@@ -235,6 +266,7 @@ def relief(d, name, route=None, mode="object", label=True):
         attrs["data-route"] = json.dumps(r["uv"], separators=(",", ":"))
         attrs["data-ll"] = json.dumps(r["ll"], separators=(",", ":"))
         attrs["data-t"] = json.dumps(r["t"], separators=(",", ":"))
+        attrs["data-route-km"] = r["km"]
     a = " ".join(f"{k}='{v}'" if k.startswith("data-r") or k in ("data-ll", "data-t") else f'{k}="{v}"' for k, v in attrs.items())
     lab = ('<p class="relief-read label tnum" aria-hidden="true"><span data-relief-ll>—</span><span data-relief-alt>—</span></p>' if label else "")
     return f'<figure class="relief relief--{mode}"><canvas {a} aria-hidden="true"></canvas>{lab}</figure>'
@@ -246,11 +278,24 @@ def contours(name, alpha=0.12, cls="", flow="scroll"):
             f'data-alpha="{alpha}" data-flow="{flow}" aria-hidden="true"></canvas>')
 
 
+def photos(d, no, title, meta, items, theme="paper", h2=None):
+    """The club's own photographs: a row of three to five, each keeping its own shape."""
+    figs = "".join(f'<figure class="strip-item strip-item--{shape} frame" data-reveal="image">{img(d, n, alt, "(min-width: 900px) 30vw, 100vw")}'
+                   f'{f"<figcaption>{esc(cap)}</figcaption>" if cap else ""}</figure>' for n, shape, alt, cap in items)
+    head_ = f'<h2 class="h-lg strip-h" data-lines>{h2}</h2>' if h2 else ""
+    return f"""<section class="section strip" data-theme="{theme}" aria-label="{esc(title)}">
+  {rowhead(no, title, meta)}
+  {head_}
+  <div class="strip-row">{figs}</div>
+</section>"""
+
+
 # ------------------------------------------------------------------ home
 def intro():
-    return """<section id="intro" class="intro" aria-labelledby="intro-title">
+    t = DER["terrain"]["abisko"]
+    return f"""<section id="intro" class="intro" aria-labelledby="intro-title">
   <div class="intro-stage" id="top">
-    <canvas aria-hidden="true"></canvas>
+    <canvas data-src="site/assets/terrain/abisko.png" data-min="{t["min"]}" data-max="{t["max"]}" data-km="{t["km"][0]},{t["km"][1]}" aria-hidden="true"></canvas>
     <div class="intro-grain" aria-hidden="true"></div>
 
     <div class="intro-title">
@@ -260,45 +305,55 @@ def intro():
 
     <div class="intro-top">
       <span class="intro-top-mark"><svg viewBox="0 0 171 138" aria-hidden="true"><use href="#mark"/></svg>Hiking Club</span>
-      <span class="intro-actions">
-        <button class="intro-sound" type="button" aria-pressed="false">Sound <span>Off</span></button>
-        <a class="intro-skip" href="#main">Skip intro</a>
-      </span>
+      <a class="intro-skip" href="#main">Skip intro</a>
     </div>
 
-    <ol class="intro-chapters" aria-hidden="true">
-      <li data-chapter="0"><b>01</b> Whiteout</li>
-      <li data-chapter="0.28"><b>02</b> Emergence</li>
-      <li data-chapter="0.44"><b>03</b> The wall</li>
-      <li data-chapter="0.60"><b>04</b> One climber</li>
-      <li data-chapter="0.88"><b>05</b> Cloud</li>
+    <ol class="intro-lines" aria-hidden="true">
+      <li data-at="0.09 0.33">The hiking and outdoor club of the Student Association at the Stockholm School of Economics.</li>
+      <li data-at="0.37 0.6">Day hikes around Stockholm, climbing through the year, and expeditions to the Swedish mountains.</li>
+      <li data-at="0.64 0.84">Open to every SSE student. No experience required.</li>
     </ol>
-    <div class="intro-readout" aria-hidden="true"><span data-read="alt">1,750 m</span><span data-read="temp">−8 °C</span><span data-read="wind">NW 11 km/h</span></div>
-    <div class="intro-alt" aria-hidden="true"><i></i></div>
-    <div class="intro-fig" aria-hidden="true"><span class="intro-fig-line"></span><span class="intro-fig-text"><b>Fig. 01</b> One climber, 1.8 m<br>North face, 1,150 m</span></div>
     <div class="intro-cue" aria-hidden="true"><span>Scroll</span><i></i></div>
 
     <div class="intro-end" tabindex="-1">
       <svg class="intro-end-lockup" viewBox="0 0 332 242.9" role="img" aria-label="Hiking Club"><use href="#lockup"/></svg>
       <p class="intro-end-sasse">SASSE <span aria-hidden="true">·</span> Stockholm School of Economics</p>
-      <p class="intro-end-coord label tnum">59.3417° N <i aria-hidden="true"></i> 68.3495° N</p>
       <span class="intro-end-line" aria-hidden="true"></span>
-      <a class="intro-end-replay label" href="./?intro">Replay the ascent</a>
+      <a class="intro-end-replay label" href="./?intro">Replay the intro</a>
     </div>
   </div>
 </section>
 """
 
 
+# the places the destinations model visits, in order of distance from the school
+TOUR = {"001": ("tyresta", 0.5), "003": ("archipelago", 0.5), "005": ("sarek", None), "002": ("kebnekaise", None), "004": ("abisko", 352)}
+
+
+def tour(d):
+    places, caps = [], []
+    for e in sorted((BY[n] for n in TOUR), key=lambda e: hav(SSE, (e["lat"], e["lon"]))):
+        name, water = TOUR[e["no"]]
+        t = DER["terrain"][name]
+        dist = hav(SSE, (e["lat"], e["lon"]))
+        far = f"{round(dist, -1):,.0f} km north" if dist > 300 else f"{round(dist, -1):,.0f} km from SSE"
+        length = f'{e["days"]} days' if e["days"] > 1 else "Day hike"
+        when = {"registering": f'Next trip · {e["dates"]}', "announced": f'Planned · {e["dates"]}', "completed": e["dates"]}[e["status"]]
+        places.append(dict(src=u(d, f"site/assets/terrain/{name}.png"), min=t["min"], max=t["max"], km=t["km"], water=water))
+        caps.append(f'<li data-tour-cap><a href="{exp_url(d, e)}"><span class="label tnum">{e["no"]} · {length} · {far}</span>'
+                    f'<span class="tour-name">{esc(e["name"])}</span><span class="tour-when small">{when}</span></a></li>')
+    return esc(json.dumps(places, separators=(",", ":"))), "".join(caps)
+
+
 def home():
     d = 0
     nxt = BY["004"]
-    far = max(EXP, key=lambda e: e["lat"])
-    dist = hav(SSE, (nxt["lat"], nxt["lon"]))
     S = DER["scandinavia"]
-    acts = "".join(f'<li><a href="{u(d, "activities/")}#{a["key"]}"><span class="tnum">0{i + 1}</span><span class="disc-word">{a["name"]}</span>'
-                   f'<span class="disc-peek">{img(d, a["img"], "", "20vw")}</span></a></li>' for i, a in enumerate(ACT))
+    acts = "".join(f'<li data-act="{i}"><a href="{u(d, "activities/")}#{a["key"]}"><span class="tnum">0{i + 1}</span><span class="disc-word">{a["name"]}</span>'
+                   f'<span class="disc-meta label">{esc(a["season"])} · {esc(a["level"])}</span></a></li>' for i, a in enumerate(ACT))
+    shots = "".join(f'<figure class="disc-shot frame" data-act="{i}" data-vt="act-{a["key"]}">{img(d, a["img"], a["name"], "(min-width: 900px) 40vw, 100vw")}</figure>' for i, a in enumerate(ACT))
     rows = "".join(log_row(d, BY[n]) for n in ("002", "003", "001"))
+    tour_json, tour_caps = tour(d)
     return (head(d, "Hiking Club — SASSE, Stockholm School of Economics",
                  "Hiking Club is the outdoor club of SASSE, the Student Association at the Stockholm School of Economics. Day trails, rock, ice and the long way north.",
                  "home", ("contours", "relief", "intro"))
@@ -309,34 +364,42 @@ def home():
   <div class="statement-track scene" data-scene>
   <div class="statement-pin">
     {contours("kebnekaise", 0.07, "statement-contours")}
-    {relief(d, "kebnekaise", None, "statement", label=False)}
+    <figure class="relief relief--statement"><canvas data-tour='{tour_json}' aria-hidden="true"></canvas></figure>
     <h2 id="st-title" class="display statement-h">
       <span class="statement-a" data-lines>From Stockholm,</span>
       <span class="statement-b" data-lines><em>outward.</em></span>
     </h2>
-    <p class="statement-cap label tnum" aria-hidden="true"><span>Fig. 02 — Kebnekaise, 1 : 60 000</span><span>67.9044° N 18.5283° E · +2,097 m</span></p>
+    <ol class="tour-caps">{tour_caps}</ol>
   </div>
   </div>
   <div class="statement-body">
-    <p class="lead" data-reveal>Hiking Club is the outdoor club of SASSE, the Student Association at the Stockholm School of Economics.</p>
-    <p data-reveal>Day trails an hour from Sveavägen. Granite in summer, ice in winter. And a few times a year, the long way north.</p>
+    <dl class="facts" data-reveal>
+      <div><dd class="tnum">2026</dd><dt>Founded</dt></div>
+      <div><dd class="tnum">{len(ACT)}</dd><dt>Activities</dt></div>
+      <div><dd class="tnum">{len([e for e in EXP if e["status"] == "completed"])}</dd><dt>Trips completed</dt></div>
+      <div><dd class="tnum">{RAIL_KM:,}<small>km</small></dd><dt>North by night train</dt></div>
+    </dl>
+    <div class="statement-text">
+      <p class="lead" data-reveal>Hiking Club is the hiking and outdoor club of SASSE, the Student Association at the Stockholm School of Economics.</p>
+      <p data-reveal>We organise day hikes around Stockholm, climbing throughout the year, and trips to the Swedish mountains. Every trip is planned and led by experienced members, and beginners are always welcome.</p>
+    </div>
   </div>
 </section>
 
 <section class="section next" data-theme="paper" aria-labelledby="next-title">
-  {rowhead("01", "Next expedition", status_tag(nxt))}
+  {rowhead("01", "Next trip", status_tag(nxt))}
   <a class="next-card" href="{exp_url(d, nxt)}">
     <figure class="next-img frame" data-reveal="image"><div class="para" data-speed="0.08">{img(d, nxt["images"]["hero"], "A single hiker in a red jacket on snow facing Lapporten.", "(min-width: 900px) 62vw, 100vw", vt="exp-004")}</div></figure>
     <div class="next-meta">
       <p class="label">Expedition <span class="tnum">{nxt["no"]}</span></p>
       <h3 id="next-title" class="h-xl" data-lines>{nxt["name"]}</h3>
       <dl class="next-dl tnum" data-reveal>
-        <div><dt>Coordinates</dt><dd>{coords(nxt, "<br>")}</dd></div>
+        <div><dt>Where</dt><dd>{esc(nxt["region"])}</dd></div>
         <div><dt>Dates</dt><dd>{nxt["dates"]}</dd></div>
         <div><dt>Difficulty</dt><dd>{grade(nxt["difficulty"])}{nxt["difficultyLabel"]}</dd></div>
-        <div><dt>Route</dt><dd>{km(route_km(nxt))} km · +{nxt["high_m"]:,} m</dd></div>
+        <div><dt>Distance</dt><dd>{km(route_km(nxt))} km over {nxt["days"]} days</dd></div>
       </dl>
-      <span class="btn btn-ink" data-reveal>Open the dossier<span class="btn-arrow" aria-hidden="true">→</span></span>
+      <span class="btn btn-ink" data-reveal>Read more<span class="btn-arrow" aria-hidden="true">→</span></span>
     </div>
   </a>
 </section>
@@ -344,30 +407,35 @@ def home():
 <section class="north scene" data-scene data-theme="paper" aria-labelledby="north-title">
   <div class="north-pin">
     <div class="north-text">
-      {rowhead("02", "Outward", "From Sveavägen 65")}
-      <h2 id="north-title" class="h-lg"><span class="tnum" data-north-km>0</span> km north.</h2>
-      <p class="north-lead">Every expedition starts at the school. The furthest so far is {far["name"]}, {km(dist)} km north of Sveavägen, above the Arctic Circle.</p>
-      <dl class="north-read tnum" aria-hidden="true">
-        <div><dt>Latitude</dt><dd data-north-lat>59.34° N</dd></div>
-        <div><dt>Arctic Circle</dt><dd>66.56° N</dd></div>
-        <div><dt>Night train</dt><dd>≈ 18 h</dd></div>
+      {rowhead("02", "Getting there", "By night train")}
+      <h2 id="north-title" class="h-lg"><span class="tnum" data-north-km>0</span> km by night train.</h2>
+      <p class="north-lead">Our mountain trips start at the school. The night train leaves Stockholm Central in the evening and arrives in Abisko, north of the Arctic Circle, the next morning.</p>
+      <dl class="north-read" aria-hidden="true">
+        <div><dt>Departs</dt><dd>Stockholm C, evening</dd></div>
+        <div><dt>Arrives</dt><dd>Abisko, next morning</dd></div>
+        <div><dt>Journey</dt><dd>About 17 hours</dd></div>
       </dl>
     </div>
-    <div class="north-map" data-north data-km="{dist:.0f}" data-lat0="{SSE[0]}" data-lat1="{nxt["lat"]}">{scandi(d, "004")}</div>
+    <div class="north-map" data-north data-km="{RAIL_KM}">{scandi(d, "004", True, rail=True)}</div>
   </div>
 </section>
 
-<section class="section home-disc" data-theme="navy" aria-labelledby="disc-title">
-  {rowhead("03", "What we do", "Five activities", h2=True)}
-  <ol class="disc-words" id="disc-title-list">{acts}</ol>
-  <a class="link home-more" href="{u(d, "activities/")}">All activities →</a>
+<section class="home-disc scene" data-scene data-theme="pine" aria-labelledby="disc-title">
+  <div class="disc-pin">
+    {rowhead("03", "What we do", "Five activities", h2=True)}
+    <div class="disc-grid">
+      <ol class="disc-words" id="disc-title-list">{acts}</ol>
+      <div class="disc-stage" aria-hidden="true">{shots}</div>
+    </div>
+    <a class="link home-more" href="{u(d, "activities/")}">All activities →</a>
+  </div>
 </section>
 
 <section class="section home-archive" data-theme="paper" aria-labelledby="arch-title">
-  {rowhead("04", "Archive", "001 — 00" + str(len([e for e in EXP if e["status"] == "completed"])))}
+  {rowhead("04", "Past trips", str(len([e for e in EXP if e["status"] == "completed"])) + " completed")}
   <h2 id="arch-title" class="h-lg" data-lines>Where we have been.</h2>
   <ol class="log">{rows}</ol>
-  <a class="link home-more" href="{u(d, "archive/")}">The full archive →</a>
+  <a class="link home-more" href="{u(d, "archive/")}">All past trips →</a>
 </section>
 
 <section class="section home-club" data-theme="paper" aria-labelledby="club-title">
@@ -375,10 +443,15 @@ def home():
   <div class="lockup" data-reveal>
     <svg class="lockup-mark" viewBox="0 0 332 242.9" role="img" aria-label="Hiking Club"><use href="#lockup"/></svg>
     <span class="lockup-x" aria-hidden="true">×</span>
-    <span class="lockup-sasse"><span class="lockup-sasse-name">SASSE</span><span class="lockup-sasse-sub">Stockholm School of Economics</span></span>
+    <a class="lockup-org" href="https://www.sasse.se" rel="noopener">{logo(d, "sasse-logo", "lockup-sasse-logo", "ink")}</a>
   </div>
-  <p class="club-lead" data-reveal>A student club of SASSE, run by students, open to every member, organised with the same care as the rest of the school.</p>
-  <a class="link home-more" href="{u(d, "the-club/")}">The club →</a>
+  <p class="club-lead" data-reveal>Hiking Club is a student club within SASSE. It is run by students, open to every SASSE member, and part of the wider community of clubs and committees at the Stockholm School of Economics.</p>
+  <div class="strip-row strip-row--home">
+    <figure class="strip-item strip-item--tall frame" data-reveal="image">{img(d, "club-spruce-file", "The group walking single file through a spruce forest.", "(min-width: 900px) 24vw, 100vw")}</figure>
+    <figure class="strip-item strip-item--wide frame" data-reveal="image">{img(d, "club-lake-cliff", "Members on a granite ledge above a forest lake.", "(min-width: 900px) 46vw, 100vw")}</figure>
+    <figure class="strip-item strip-item--tall frame" data-reveal="image">{img(d, "club-pine-trail", "Members on a trail through sunlit pines.", "(min-width: 900px) 24vw, 100vw")}</figure>
+  </div>
+  <a class="link home-more" href="{u(d, "the-club/")}">About the club →</a>
 </section>
 
 {join_band(d)}
@@ -387,12 +460,12 @@ def home():
 
 
 def join_band(d):
-    return f"""<section class="section join-band" data-theme="navy" aria-labelledby="join-title">
+    return f"""<section class="section join-band" data-theme="pine" aria-labelledby="join-title">
   {rowhead("06", "Join", "Season 2026–27")}
-  <h2 id="join-title" class="display display-join" data-lines>Join the next<br><em>expedition.</em></h2>
+  <h2 id="join-title" class="display display-join" data-lines>Join the<br><em>club.</em></h2>
   <div class="join-band-cta" data-reveal>
     <a class="btn btn-snow" href="{u(d, "join/")}">Become a member<span class="btn-arrow" aria-hidden="true">→</span></a>
-    <a class="link" href="{u(d, "expeditions/")}">See the expeditions</a>
+    <a class="link" href="{u(d, "expeditions/")}">See upcoming trips</a>
   </div>
 </section>"""
 
@@ -422,7 +495,7 @@ def expeditions():
     <figure class="dossier-row-img frame">{img(d, e["images"]["hero"], "", "(min-width: 900px) 34vw, 100vw", vt="exp-" + e["no"])}</figure>
     <span class="dossier-row-no label tnum">Exp. {e["no"]}</span>
     <span class="dossier-row-name" style="view-transition-name: name-{e["no"]}">{esc(e["name"])}</span>
-    <span class="dossier-row-coord label tnum">{coords(e, "<br>")}</span>
+    <span class="dossier-row-coord label">{esc(e["region"])}</span>
     <span class="dossier-row-date">{e["dates"]}</span>
     <span class="dossier-row-status">{status_tag(e)}</span>
     <dl class="dossier-row-dl tnum">
@@ -435,18 +508,18 @@ def expeditions():
 </li>""")
     return (head(d, "Expeditions — Hiking Club", "Upcoming Hiking Club expeditions: dates, difficulty, distance, places left.", "expeditions", ("contours",))
             + header(d, "expeditions/") + '<main id="main">'
-            + page_head(d, "01", "Expeditions", "Numbered,<br><em>documented.</em>",
-                        "Every trip the club takes past the city gets a number and a dossier: where, when, how hard, what to bring, and who is coming.", "abisko")
+            + page_head(d, "01", "Expeditions", "Upcoming<br><em>trips.</em>",
+                        "From day hikes near Stockholm to week-long trips in the mountains. Every trip has its own page with dates, difficulty, route and packing list.", "abisko")
             + f"""<section class="section exp-up" data-theme="paper" aria-labelledby="up-title">
-  {rowhead("01", "Upcoming", f"{len(up)} dossiers")}
+  {rowhead("01", "Upcoming", f"{len(up)} trips")}
   <h2 id="up-title" class="visually-hidden">Upcoming expeditions</h2>
   <ol class="dossier-rows">{"".join(rows)}</ol>
 </section>
 <section class="section exp-past" data-theme="paper" aria-labelledby="past-title">
-  {rowhead("02", "Completed", f"{len(past)} expeditions")}
-  <h2 id="past-title" class="h-lg" data-lines>Already walked.</h2>
+  {rowhead("02", "Completed", f"{len(past)} trips")}
+  <h2 id="past-title" class="h-lg" data-lines>Past trips.</h2>
   <ol class="log">{"".join(log_row(d, e) for e in reversed(past))}</ol>
-  <a class="link home-more" href="{u(d, "archive/")}">The archive, with the map →</a>
+  <a class="link home-more" href="{u(d, "archive/")}">All past trips, on the map →</a>
 </section>
 {join_band(d)}
 </main>""" + footer(d))
@@ -462,7 +535,7 @@ def expedition(e):
             ("Terrain", esc(e["terrain"])), ("Distance", f'{km(route_km(e))} km' + (" over " + str(e["days"]) + " days" if e["days"] > 1 else "")),
             ("Ascent", f'+{(r["gain"] if r else e["ascent_m"]):,} m'), ("High point", f'+{e["high_m"]:,} m, {esc(e["highName"])}'),
             ("Group", f'{e["group"]}' + (f' — {e["placesLeft"]} places left' if e.get("placesLeft") else "")),
-            ("Getting there", esc(e["transport"])), ("From Sveavägen", f"{km(dist)} km"), ("Weather", esc(e["climate"]))]
+            ("Getting there", esc(e["transport"])), ("From SSE", f"{km(dist)} km in a straight line"), ("Weather", esc(e["climate"]))]
     if e.get("leaders"): spec.append(("Leaders", esc(e["leaders"])))
     if e.get("cost"): spec.append(("Cost", esc(e["cost"])))
     spec_html = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in spec)
@@ -516,7 +589,7 @@ def expedition(e):
     </div>
     <div class="route-text">
       {rowhead("02", "Route", f"{km(r['km'])} km · +{r['gain']:,} m", h2=False)}
-      <h2 id="route-title" class="h-lg" data-lines>The way up.</h2>
+      <h2 id="route-title" class="h-lg" data-lines>The route.</h2>
       <ol class="stages">{"".join(st_html)}</ol>
     </div>
   </div>
@@ -527,14 +600,14 @@ def expedition(e):
         relief_html = f"""<section class="section dossier-relief" data-theme="paper" aria-label="Terrain model">
   {rowhead("03", "Terrain", f"{DER['terrain'][e['relief']]['km'][0]:.0f} × {DER['terrain'][e['relief']]['km'][1]:.0f} km · {DER['terrain'][e['relief']]['min']:,}–{DER['terrain'][e['relief']]['max']:,} m")}
   <div class="scene dossier-relief-scene" data-scene>{relief(d, e["relief"], e["slug"], "dossier")}</div>
-  <p class="small dossier-relief-cap">Model built from open elevation data. Vertical scale ×1.6. The route is drawn as you scroll.</p>
+  <p class="small dossier-relief-cap">A terrain model of the area, built from open elevation data, with the route drawn in as you scroll. Heights are exaggerated 1.6 times.</p>
 </section>"""
 
     log_html = ""
     if e.get("log"):
         log_html = f"""<section class="section field-log" data-theme="paper" aria-labelledby="log-title">
-  {rowhead("04", "Field log", e["dates"])}
-  <h2 id="log-title" class="h-lg" data-lines>Field log.</h2>
+  {rowhead("04", "Trip report", e["dates"])}
+  <h2 id="log-title" class="h-lg" data-lines>How it went.</h2>
   <ol class="log-times">{"".join(f'<li data-reveal><span class="label tnum">{t}</span><p>{esc(x)}</p></li>' for t, x in e["log"])}</ol>
 </section>"""
 
@@ -549,8 +622,8 @@ def expedition(e):
     gallery = "".join(f'<figure class="gal-item frame" data-reveal="image">{img(d, n, cap, "(min-width: 900px) 45vw, 100vw")}<figcaption><b>{no}</b> {esc(cap)}</figcaption></figure>'
                       for n, no, cap in e["images"]["gallery"][1:])
     cta = {"registering": f'<a class="btn btn-snow" href="{u(d, "join/")}?trip={e["no"]}">Register for {e["no"]}<span class="btn-arrow" aria-hidden="true">→</span></a><p class="small">Registration closes {e.get("closes", "")}. {e.get("placesLeft", "")} of {e["group"]} places left.</p>',
-           "announced": f'<p class="h-lg">The dossier opens {e.get("opens", "")}.</p><a class="btn btn-snow" href="{u(d, "join/")}">Become a member to hear first<span class="btn-arrow" aria-hidden="true">→</span></a>',
-           "completed": f'<p class="h-lg">Completed, {e["short"]}.</p><a class="btn btn-snow" href="{u(d, "expeditions/")}">See what is next<span class="btn-arrow" aria-hidden="true">→</span></a>'}[e["status"]]
+           "announced": f'<p class="h-lg">Registration opens {e.get("opens", "")}.</p><a class="btn btn-snow" href="{u(d, "join/")}">Become a member to hear first<span class="btn-arrow" aria-hidden="true">→</span></a>',
+           "completed": f'<p class="h-lg">Completed, {e["short"]}.</p><a class="btn btn-snow" href="{u(d, "expeditions/")}">See upcoming trips<span class="btn-arrow" aria-hidden="true">→</span></a>'}[e["status"]]
     pn = (f'<a class="pn pn-prev" href="{exp_url(d, prev_e)}"><span class="label">← Exp. {prev_e["no"]}</span><span class="pn-name">{esc(prev_e["name"])}</span></a>' if prev_e else "<span></span>") + \
          (f'<a class="pn pn-next" href="{exp_url(d, next_e)}"><span class="label">Exp. {next_e["no"]} →</span><span class="pn-name">{esc(next_e["name"])}</span></a>' if next_e else "<span></span>")
     title = f'Expedition {e["no"]} — {e["name"]} — Hiking Club'
@@ -560,14 +633,14 @@ def expedition(e):
   <div class="exp-hero-head">
     <p class="label page-crumb"><a href="{u(d, "expeditions/")}">Expeditions</a> <span aria-hidden="true">/</span> Exp. {e["no"]}</p>
     <h1 id="exp-title" class="h-xl" style="view-transition-name: name-{e["no"]}">{esc(e["name"])}</h1>
-    <p class="exp-hero-coord label tnum">{coords(e, "<br>")}</p>
+    <p class="exp-hero-coord label">{esc(e["region"])}</p>
     <p class="exp-hero-date">{e["dates"]}</p>
     <p class="exp-hero-status">{status_tag(e)}</p>
   </div>
   <figure class="exp-hero-img frame">{img(d, e["images"]["hero"], e["images"]["gallery"][0][2], "100vw", eager=True, vt="exp-" + e["no"])}<figcaption><b>{e["images"]["gallery"][0][1]}</b> {esc(e["images"]["gallery"][0][2])}</figcaption></figure>
 </section>
 <section class="section exp-facts" data-theme="paper" aria-labelledby="facts-title">
-  {rowhead("01", "Dossier", esc(e["region"]))}
+  {rowhead("01", "Overview", esc(e["region"]))}
   <div class="exp-facts-in">
     <h2 id="facts-title" class="exp-note" data-reveal>{esc(e["note"])}</h2>
     <dl class="spec" data-reveal>{spec_html}</dl>
@@ -578,7 +651,7 @@ def expedition(e):
 {f'<section class="section gallery" data-theme="paper" aria-label="Photographs"><div class="gal">{gallery}</div></section>' if gallery else ""}
 {log_html}
 {pack_html}
-<section class="section exp-cta" data-theme="navy">
+<section class="section exp-cta" data-theme="pine">
   {rowhead("06", "Exp. " + e["no"], STATUS[e["status"]])}
   <div class="exp-cta-in" data-reveal>{cta}</div>
   <nav class="pn-row" aria-label="Other expeditions">{pn}</nav>
@@ -597,11 +670,11 @@ def archive():
     cards = "".join(f"""<a class="amap-card" data-card="{e["no"]}" href="{exp_url(d, e)}" tabindex="-1" aria-hidden="true">
   <span class="amap-photo">{img(d, e["images"]["hero"], "", "22vw")}</span>
   <span class="label tnum">{e["no"]} · {e["short"]}</span><span class="amap-name">{esc(e["name"])}</span>
-  <span class="label tnum">{coords(e)} · +{e["high_m"]:,} m</span></a>""" for e in EXP)
+  <span class="label">{esc(e["region"])}</span></a>""" for e in EXP)
     links = "".join(f'<li><a href="{exp_url(d, e)}" data-hover="{e["no"]}"><span class="tnum">{e["no"]}</span> {esc(e["name"])}</a></li>' for e in EXP)
-    return (head(d, "Archive — Hiking Club", "The Hiking Club archive: every expedition, numbered, with coordinates, altitudes and photographs.", "archive", ("contours",))
+    return (head(d, "Archive — Hiking Club", "Every trip Hiking Club has made, by year and on the map, with photographs.", "archive", ("contours",))
             + header(d, "archive/") + '<main id="main">'
-            + page_head(d, "02", "Archive", "The<br><em>record.</em>", "Every expedition the club has made, in order. Numbers are never reused.", "kebnekaise",
+            + page_head(d, "02", "Archive", "Past<br><em>trips.</em>", "Every trip the club has made, listed by year and shown on the map.", "kebnekaise",
                         '<div class="view-toggle" role="group" aria-label="View"><button type="button" class="label" aria-pressed="true" data-view="list">List</button><button type="button" class="label" aria-pressed="false" data-view="map">Map</button></div>')
             + f"""<section class="section archive-body" data-theme="paper" data-view-root="list" aria-label="Expeditions">
   <div class="archive-list"><ol class="years">{"".join(groups)}</ol></div>
@@ -629,10 +702,10 @@ def activities():
                "alpine": '<div class="act-white" aria-hidden="true"></div>',
                "winter": '<canvas class="snowfall" data-snow aria-hidden="true"></canvas>',
                "expeditions": f'<div class="act-map">{scandi(d, None, True, "scandi--act")}</div>'}[a["key"]]
-        scenes.append(f"""<section id="{a["key"]}" class="act act--{a["key"]} scene" data-scene data-theme="{"navy" if a["key"] == "expeditions" else "paper"}" aria-labelledby="act-{a["key"]}">
+        scenes.append(f"""<section id="{a["key"]}" class="act act--{a["key"]} scene" data-scene data-theme="{ {"expeditions": "navy", "hiking": "pine"}.get(a["key"], "paper") }" aria-labelledby="act-{a["key"]}">
   <div class="act-pin">
     {env}
-    <figure class="act-img frame"><div class="para" data-speed="0.06">{img(d, a["img"], "", "(min-width: 900px) 46vw, 100vw")}</div></figure>
+    <figure class="act-img frame"><div class="para" data-speed="0.06">{img(d, a["img"], "", "(min-width: 900px) 46vw, 100vw", vt="act-" + a["key"])}</div></figure>
     <div class="act-text">
       <p class="label tnum">0{i + 1} / 0{len(ACT)}</p>
       <h2 id="act-{a["key"]}" class="act-h">{a["name"]}</h2>
@@ -641,69 +714,76 @@ def activities():
     </div>
   </div>
 </section>""")
-    return (head(d, "Activities — Hiking Club", "Hiking, climbing, alpine, winter and expeditions: what Hiking Club does, when, and what it takes.", "activities", ("contours", "rock"))
+    return (head(d, "Activities — Hiking Club", "Hiking, climbing, alpine trips, winter activities and expeditions with Hiking Club at SASSE.", "activities", ("contours", "rock"))
             + header(d, "activities/") + '<main id="main">'
-            + page_head(d, "03", "Activities", "Five ways<br><em>out.</em>", "From a day on Sörmlandsleden to a week on ski in Sarek. Each one has a season, a level and an equipment list.", None,
+            + page_head(d, "03", "Activities", "What we<br><em>do.</em>", "Hiking, climbing, alpine trips, winter activities and expeditions. Each has its own season, level and equipment list.", None,
                         '<ol class="act-index label">' + "".join(f'<li><a href="#{a["key"]}"><span class="tnum">0{i + 1}</span> {a["name"]}</a></li>' for i, a in enumerate(ACT)) + "</ol>")
             + "".join(scenes) + join_band(d) + "</main>" + footer(d))
 
 
 # ------------------------------------------------------------------ the club
-RULES = [("I", "The group sets the pace."), ("II", "The summit is optional.<br>Coming back is not."), ("III", "Leave no trace.")]
+RULES = [("I", "The group sets the pace."), ("II", "Safety comes before<br>the summit."), ("III", "Leave no trace.")]
 
 
 def club():
     d = 1
     first = min(EXP, key=lambda e: e["no"])
     hist = "".join(f'<li data-reveal><span class="label tnum">{e["short"]}</span><span class="hist-no tnum">{e["no"]}</span><span class="hist-name">{esc(e["name"])}</span><span class="small">{esc(e["category"])}</span></li>' for e in EXP)
-    rules = "".join(f'<section class="rule-scene" aria-label="Rule {n}"><p class="rule-no label">Rule {n}</p><p class="rule-text">{t}</p></section>' for n, t in RULES)
-    return (head(d, "The Club — Hiking Club", "Hiking Club is a student club of SASSE at the Stockholm School of Economics: who runs it, how it keeps people safe, and its three rules.", "club", ("contours",))
+    rules = "".join(f'<section class="rule-scene" aria-label="Principle {n}"><p class="rule-no label">Principle {n}</p><p class="rule-text">{t}</p></section>' for n, t in RULES)
+    return (head(d, "The Club — Hiking Club", "About Hiking Club, a student club of SASSE at the Stockholm School of Economics: who we are, how we work, and how we keep trips safe.", "club", ("contours",))
             + header(d, "the-club/") + '<main id="main">'
-            + page_head(d, "04", "The club", "A club of<br><em>SASSE.</em>", "Run by students of the Stockholm School of Economics, for students of the Stockholm School of Economics.", "kebnekaise",
-                        """<div class="lockup lockup--head" data-reveal><svg class="lockup-mark" viewBox="0 0 332 242.9" role="img" aria-label="Hiking Club"><use href="#lockup"/></svg><span class="lockup-x" aria-hidden="true">×</span><span class="lockup-sasse"><span class="lockup-sasse-name">SASSE</span><span class="lockup-sasse-sub">Stockholm School of Economics</span></span></div>""")
+            + page_head(d, "04", "The club", "About the<br><em>club.</em>", "Hiking Club is a student-run club within SASSE, the Student Association at the Stockholm School of Economics.", "kebnekaise",
+                        f"""<div class="lockup lockup--head" data-reveal><svg class="lockup-mark" viewBox="0 0 332 242.9" role="img" aria-label="Hiking Club"><use href="#lockup"/></svg><span class="lockup-x" aria-hidden="true">×</span><a class="lockup-org" href="https://www.sasse.se" rel="noopener">{logo(d, "sasse-logo", "lockup-sasse-logo", "ink")}</a></div>""")
             + f"""<section class="section club-about" data-theme="paper" aria-labelledby="about-title">
-  {rowhead("01", "What it is", "Est. within SASSE")}
-  <h2 id="about-title" class="club-lead" data-reveal>Hiking Club is a student club of SASSE, the Student Association at the Stockholm School of Economics. It takes students out of the city, and brings them back.</h2>
+  {rowhead("01", "About us", "Part of SASSE")}
+  <h2 id="about-title" class="club-lead" data-reveal>Hiking Club gets students at the Stockholm School of Economics outdoors, from day hikes near the city to trips in the Swedish mountains.</h2>
   <div class="club-cols">
-    <div data-reveal><p class="label">SASSE</p><p>SASSE is the student association of the school. The club is one of its clubs: members are SASSE members, the board answers to SASSE, and the club follows its statutes.</p></div>
-    <div data-reveal><p class="label">Stockholm School of Economics</p><p>Sveavägen 65 is where every expedition starts, often on a Thursday evening, with a night train to catch.</p></div>
-    <div data-reveal><p class="label">Philosophy</p><p>Small groups, long days, no hurry. The mountains are not a backdrop for a photograph, they are the point.</p></div>
+    <div data-reveal><p class="label">SASSE</p><p>SASSE is the Student Association at the Stockholm School of Economics. Hiking Club is one of its clubs: our members are SASSE members, and the board reports to SASSE and follows its statutes.</p></div>
+    <div data-reveal><p class="label">Stockholm School of Economics</p><p>Most trips start from the school at Sveavägen 65. Longer trips usually leave on a Thursday or Friday evening by night train.</p></div>
+    <div data-reveal><p class="label">Our approach</p><p>Small groups, experienced leaders and enough time. Every trip is planned in advance, and safety always comes first.</p></div>
   </div>
 </section>
 
-<section class="manifesto-seq" data-theme="paper" aria-label="The three rules">
+""" + photos(d, "—", "On the trail", "Photographs by members", [
+        ("club-lake-cliff", "wide", "Members on a granite ledge above a forest lake.", "Above the lake."),
+        ("forest-autumn-shore", "tall", "A member walking along an autumn lakeshore.", "Along the lakeshore in autumn."),
+        ("winter-fur-hat", "wide", "A fur hat hung on ski poles in the snow at night.", "A night stop on a winter trip."),
+        ("winter-last-light", "wide", "Last light over a snowbound spruce forest.", "Evening in the winter forest."),
+    ], theme="pine") + f"""
+
+<section class="manifesto-seq" data-theme="paper" aria-label="Our principles">
   <svg class="rope" aria-hidden="true" data-rope><path/></svg>
   {rules}
 </section>
 
 <section class="section club-safety" data-theme="navy" aria-labelledby="safety-title">
-  {rowhead("02", "Safety", "Before the summit")}
-  <h2 id="safety-title" class="h-lg" data-lines>Coming back<br><em>is the plan.</em></h2>
+  {rowhead("02", "Safety", "On every trip")}
+  <h2 id="safety-title" class="h-lg" data-lines>Safety<br><em>first.</em></h2>
   <ol class="safety">
-    <li data-reveal><span class="tnum">01</span><p><b>Certified guides</b> on every glacier and alpine day. Club trip leaders are trained in first aid and navigation.</p></li>
-    <li data-reveal><span class="tnum">02</span><p><b>A dossier for every trip</b>, with the route, the turnaround time and the equipment list, sent a week before.</p></li>
-    <li data-reveal><span class="tnum">03</span><p><b>Small groups.</b> Never more than six to a rope team, never fewer than two leaders on an expedition.</p></li>
-    <li data-reveal><span class="tnum">04</span><p><b>Weather decides.</b> Trips are moved or cut short without discussion, and nobody minds.</p></li>
+    <li data-reveal><span class="tnum">01</span><p><b>Certified guides</b> on all glacier and alpine trips. Club trip leaders are trained in first aid and navigation.</p></li>
+    <li data-reveal><span class="tnum">02</span><p><b>A plan for every trip</b>, with the route, turnaround time and equipment list, shared a week before departure.</p></li>
+    <li data-reveal><span class="tnum">03</span><p><b>Small groups.</b> At most six people per rope team, and at least two leaders on every multi-day trip.</p></li>
+    <li data-reveal><span class="tnum">04</span><p><b>Weather decides.</b> Trips are moved or shortened whenever the conditions require it.</p></li>
   </ol>
 </section>
 
 <section class="section club-board" data-theme="paper" aria-labelledby="board-title">
   {rowhead("03", "The board", "Season 2026–27")}
-  <h2 id="board-title" class="h-lg" data-lines>Who runs it.</h2>
+  <h2 id="board-title" class="h-lg" data-lines>The board.</h2>
   <ul class="board">
     <li data-reveal><p class="label">Chair</p><p class="board-name">To be announced</p></li>
     <li data-reveal><p class="label">Treasurer</p><p class="board-name">To be announced</p></li>
     <li data-reveal><p class="label">Safety officer</p><p class="board-name">To be announced</p></li>
     <li data-reveal><p class="label">Trip leaders</p><p class="board-name">To be announced</p></li>
   </ul>
-  <p class="small">The board is elected by the members each spring. Write to it through the join page.</p>
+  <p class="small">The board is elected by the members every spring. You can contact it through the Join page.</p>
 </section>
 
 <section class="section club-history" data-theme="paper" aria-labelledby="hist-title">
   {rowhead("04", "History", "Since " + first["short"])}
-  <h2 id="hist-title" class="h-lg" data-lines>So far.</h2>
+  <h2 id="hist-title" class="h-lg" data-lines>Our trips so far.</h2>
   <ol class="hist">{hist}</ol>
-  <a class="link home-more" href="{u(d, "archive/")}">The archive →</a>
+  <a class="link home-more" href="{u(d, "archive/")}">All past trips →</a>
 </section>
 {join_band(d)}
 </main>""" + footer(d))
@@ -711,48 +791,54 @@ def club():
 
 # ------------------------------------------------------------------ join
 FAQ = [
-    ("I have never hiked. Can I come?", "Yes. Most trips need no experience, and the ones that do say so in their dossier. Start with a day hike."),
-    ("Do I need my own equipment?", "Boots and a shell jacket, yes. Technical equipment (harnesses, crampons, axes, helmets) is lent by the club."),
-    ("How are places on expeditions given out?", "Members register when a dossier opens. If a trip is full, there is a waiting list, and members who have not been on an expedition yet go first."),
-    ("What does it cost?", "Membership follows SASSE’s club fees. Trips are priced at cost — train, huts, guides, food — and the price is in the dossier before you register."),
-    ("Is it only for students on the Bachelor programme?", "No. Bachelor, Master, PhD and exchange students with a SASSE membership are all welcome."),
-    ("What if the weather turns?", "Then the plan changes. Trips are moved or shortened without discussion. Nobody has ever been disappointed to come back."),
+    ("I have never hiked. Can I join?", "Yes. Most trips require no experience, and those that do say so on the trip page. A day hike is a good place to start."),
+    ("Do I need my own equipment?", "You need boots and a waterproof jacket. Technical equipment such as harnesses, crampons, ice axes and helmets can be borrowed from the club."),
+    ("How are places on trips allocated?", "Members register when registration for a trip opens. If a trip is full there is a waiting list, and members who have not joined a multi-day trip before get priority."),
+    ("What does it cost?", "Membership follows SASSE’s club fees. Trips are priced at cost (travel, accommodation, guides and food), and the price is published before registration opens."),
+    ("Is the club only for Bachelor students?", "No. Bachelor, Master, PhD and exchange students with a SASSE membership are all welcome."),
+    ("What happens if the weather is bad?", "The plan changes. Trips are moved or shortened when the conditions require it, and you will be told as early as possible."),
 ]
 
 
 def join():
     d = 1
-    return (head(d, "Join — Hiking Club", "How to join Hiking Club at SASSE: who can join, what it costs, how expeditions work, and the form.", "join", ())
+    return (head(d, "Join — Hiking Club", "How to join Hiking Club at SASSE: who can join, what it costs, how trips work, and the membership form.", "join", ())
             + header(d, "join/") + '<main id="main">'
-            + page_head(d, "05", "Join", "Join the<br><em>club.</em>", "Open to every student of the Stockholm School of Economics with a SASSE membership. Experience optional.", "abisko")
+            + page_head(d, "05", "Join", "Join the<br><em>club.</em>", "Membership is open to all students at the Stockholm School of Economics who are members of SASSE. No experience is needed.", "abisko")
             + f"""<section class="section join-facts" data-theme="paper" aria-label="Membership">
   {rowhead("01", "Membership", "Season 2026–27")}
   <div class="jf">
-    <div data-reveal><p class="label">Who can join</p><p>Every SSE student with a SASSE membership: Bachelor, Master, PhD, exchange.</p></div>
-    <div data-reveal><p class="label">What membership means</p><p>First access to every dossier, the club’s equipment on loan, and a say in where it goes next.</p></div>
-    <div data-reveal><p class="label">Experience</p><p>None for day hikes. Each dossier states what it asks for, and we will tell you honestly if a trip is not for you yet.</p></div>
-    <div data-reveal><p class="label">Costs</p><p>SASSE’s club membership, then trips at cost. The price is always in the dossier before you register.</p></div>
+    <div data-reveal><p class="label">Who can join</p><p>All SSE students with a SASSE membership: Bachelor, Master, PhD and exchange students.</p></div>
+    <div data-reveal><p class="label">Membership includes</p><p>Early access to trip registration, club equipment on loan, and a say in future trips.</p></div>
+    <div data-reveal><p class="label">Experience</p><p>None is needed for day hikes. Each trip page states the level required, and we are happy to advise.</p></div>
+    <div data-reveal><p class="label">Costs</p><p>The SASSE club membership fee, and trips at cost. Prices are published before registration opens.</p></div>
   </div>
 </section>
 
-<section class="section join-how" data-theme="navy" aria-labelledby="how-title">
-  {rowhead("02", "How expeditions work", "Four steps")}
-  <h2 id="how-title" class="h-lg" data-lines>From dossier<br><em>to summit.</em></h2>
+""" + photos(d, "—", "What it looks like", "Autumn and winter", [
+        ("club-pine-trail", "tall", "Members on a trail through sunlit pines.", None),
+        ("winter-fells", "wide", "Snow-capped fells over a forest, under a clear winter sky.", None),
+        ("forest-lake-frame", "tall", "A forest lake framed by trees.", None),
+    ]) + f"""
+
+<section class="section join-how" data-theme="pine" aria-labelledby="how-title">
+  {rowhead("02", "How trips work", "Four steps")}
+  <h2 id="how-title" class="h-lg" data-lines>How a trip<br><em>works.</em></h2>
   <ol class="how">
-    <li data-reveal><span class="tnum">01</span><h3>The dossier opens</h3><p>Route, dates, level, price and places. Members hear first.</p></li>
-    <li data-reveal><span class="tnum">02</span><h3>You register</h3><p>Places are confirmed within a week. There is a waiting list when a trip is full.</p></li>
-    <li data-reveal><span class="tnum">03</span><h3>The briefing</h3><p>A week before: equipment check, the plan, the turnaround time, who to call.</p></li>
-    <li data-reveal><span class="tnum">04</span><h3>The trip</h3><p>Small groups, experienced leaders, certified guides where the terrain asks for them.</p></li>
+    <li data-reveal><span class="tnum">01</span><h3>Registration opens</h3><p>Each trip is announced with dates, level, price and number of places. Members hear first.</p></li>
+    <li data-reveal><span class="tnum">02</span><h3>You register</h3><p>Places are confirmed within a week. If a trip is full, there is a waiting list.</p></li>
+    <li data-reveal><span class="tnum">03</span><h3>The briefing</h3><p>A week before departure we go through the route, the equipment and the safety plan.</p></li>
+    <li data-reveal><span class="tnum">04</span><h3>The trip</h3><p>Small groups, experienced leaders, and certified guides where the terrain requires them.</p></li>
   </ol>
 </section>
 
 <section class="section join-faq" data-theme="paper" aria-labelledby="faq-title">
   {rowhead("03", "Questions", f"{len(FAQ)} answers")}
-  <h2 id="faq-title" class="h-lg" data-lines>Before you ask.</h2>
+  <h2 id="faq-title" class="h-lg" data-lines>Frequently asked<br><em>questions.</em></h2>
   <div class="faq">{"".join(f'<details class="faq-item"><summary><span>{esc(q)}</span><span class="log-plus" aria-hidden="true"></span></summary><p>{esc(a)}</p></details>' for q, a in FAQ)}</div>
 </section>
 
-<section class="section join" data-theme="navy" aria-labelledby="form-title">
+<section class="section join" data-theme="pine" aria-labelledby="form-title">
   {rowhead("04", "The form", "We reply within a week")}
   <h2 id="form-title" class="display display-join" data-lines>Become<br><em>a member.</em></h2>
   <div class="join-grid">
