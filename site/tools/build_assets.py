@@ -310,9 +310,11 @@ def terrain():
 
 # Heightmaps only (no contour maps), for the destinations model on the home page. Same encoding.
 RELIEFS = {
+    "paradiset":   ((59.115, 17.960, 59.200, 18.130), 13),
+    "bogesund":    ((59.362, 18.143, 59.447, 18.313), 13),
     "tyresta":     ((59.140, 18.215, 59.225, 18.385), 13),
-    "archipelago": ((58.745, 17.780, 58.845, 17.970), 13),
-    "sarek":       ((67.215, 17.500, 67.345, 17.840), 12),
+    "lovo":        ((59.282, 17.769, 59.367, 17.939), 13),
+    "kungsangen":  ((59.436, 17.664, 59.521, 17.834), 13),
 }
 
 
@@ -452,14 +454,25 @@ def scandi():
            + "".join(f'<path stroke-width="{wdt}" opacity="{op}" d="{" ".join(segs)}"/>' for segs, wdt, op in out.values())
            + "</svg>")
     (MAP / "scandinavia.svg").write_text(svg)
-    data = json.loads((DATA / "expeditions.json").read_text())
     d = derived()
-    d["scandinavia"] = dict(w=W, h=H,
+    d["scandinavia"] = dict(d.get("scandinavia", {}), w=W, h=H,
         stockholm=[round(v, 1) for v in to_svg(59.3417, 18.0572)],
-        points={e["slug"]: [round(v, 1) for v in to_svg(e["lat"], e["lon"])] for e in data["expeditions"]},
         lat={L: [round(v, 1) for v in to_svg(L, 4)] for L in (55, 60, 65, 70)})
     save_derived(d)
+    points()
     print("scandinavia", W, H, len(svg) // 1024, "KB")
+
+
+def points():
+    """Each expedition's place on the map of Scandinavia (run after changing expeditions.json)."""
+    X0, X1 = -560.0, 900.0; Y0, Y1 = float(tm(54.5, 15)[1]), float(tm(71.3, 15)[1])
+    W = 1000; H = int(round(W * (Y1 - Y0) / (X1 - X0)))
+    to_svg = lambda la, lo: (float((tm(la, lo)[0] - X0) / (X1 - X0) * W), float((Y1 - tm(la, lo)[1]) / (Y1 - Y0) * H))
+    data = json.loads((DATA / "expeditions.json").read_text())
+    d = derived()
+    d["scandinavia"]["points"] = {e["slug"]: [round(v, 1) for v in to_svg(e["lat"], e["lon"])] for e in data["expeditions"]}
+    save_derived(d)
+    print("points", len(data["expeditions"]))
 
 
 # The night train from Stockholm to Abisko, through the stations it runs through (approximate positions,

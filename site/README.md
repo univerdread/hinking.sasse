@@ -5,7 +5,7 @@ repo root. Pages are generated from one dataset; assets live in `site/`.
 
 ```
 index.html, expeditions/, archive/, activities/, the-club/, join/   generated pages (do not edit by hand)
-site/data/expeditions.json   the source of truth: the club (founded, members), expeditions 001–005, activities
+site/data/expeditions.json   the source of truth: the club (founded, members), trips 001–007, activities
 site/data/images.json        written by build_assets photos: each photo's sizes, AVIF or not, its placeholder
 site/data/derived.json       computed from open elevation data: routes, profiles, terrain, map positions
 site/tools/build_assets.py   photos, contour maps, heightmaps, Scandinavia map, least-cost routes, logo
@@ -16,7 +16,6 @@ site/assets/js/intro.js      the opening (home only): the Abisko valley as layer
 site/assets/js/intro-ascent.js  the earlier raymarched version, only loaded with ?scene=ascent
 site/assets/js/relief.js     the terrain objects: the destinations model (home) and a trip's block with its route
 site/assets/js/contours.js   live contour layers: marching squares over the heightmaps, flowing with scroll
-site/assets/js/rock.js       the granite fragment in Activities → Climbing
 ```
 
 Rebuild after changing data: `python3 site/tools/build_assets.py routes && python3 site/tools/build_pages.py`.
@@ -27,8 +26,8 @@ Serve the root to try it: `python3 -m http.server` (heightmaps are read from can
 | What | Where |
 |---|---|
 | Club inbox. The form composes an email to it | `build_pages.py`, `data-mailto` in `join()` |
-| Dates, group sizes, places left, costs, itineraries, field logs | `site/data/expeditions.json` |
-| Expedition 005 Sarek is an announced example | same |
+| The planned expeditions 006 Abisko and 007 Sarek: routes, group sizes, costs, itineraries | `site/data/expeditions.json` |
+| Which photographs belong to which trip (assigned by guess) | same, `images` of each trip |
 | The board: roles are listed, names are "To be announced" | `build_pages.py`, `club()` |
 | FAQ answers about fees and allocation | `build_pages.py`, `FAQ` |
 
@@ -43,7 +42,7 @@ Real: coordinates, summit heights, stations and huts, the terrain, the routes' s
 | `/expeditions/` | Upcoming dossiers (status, dates, difficulty, distance, places), then the completed ones |
 | `/expeditions/<no>-<name>/` | One dossier per expedition: facts, route map + elevation profile + stages, terrain model, photographs, field log, packing list, registration |
 | `/archive/` | The record by year, as a list or on the map of Scandinavia |
-| `/activities/` | Five scenes: hiking, climbing, alpine, winter, expeditions — season, level, group, equipment, past trips |
+| `/activities/` | Four scenes: hiking, mountaineering, winter, expeditions — season, level, group, equipment, past trips |
 | `/the-club/` | SASSE and SSE, philosophy, the three rules, safety, the board, history |
 | `/join/` | Who can join, membership, experience, costs, how expeditions work, FAQ, the form |
 
@@ -71,7 +70,7 @@ Everything is drawn from the club's world, and nothing moves without a reason.
 - **The relief** (`relief.js`), the signature object: a sculptural block of real terrain, stone top,
   graphite sides, contours every 50 m. It turns with the scroll and leans towards the pointer. With a
   route, the route draws itself along the ground and the coordinates of its head update.
-- **Routes**: Stockholm → destination arcs on the Scandinavia map (home: *1,002 km north*, counting
+- **Routes**: Stockholm → destination arcs on the Scandinavia map (home: the night train north, counting
   kilometres and latitude), and trail routes on the area maps, drawn by scrolling through the stages.
   Hover a stage and its segment is picked out on the map.
 - **The rope** (the club page): a verlet rope through the three rules, nudged by scroll velocity.
@@ -85,12 +84,13 @@ Everything is drawn from the club's world, and nothing moves without a reason.
 
 1. The flight up the Abisko valley, and the contour drawing it ends in.
 2. *From Stockholm, outward.*: one block of land becomes each destination in turn, in order of distance
-   from the school (Tyresta, the archipelago, Sarek, Kebnekaise, Abisko), each with a link to its trip.
+   from the school (Lovö, Bogesundslandet, Paradiset, Tyresta, Kungsängen), then Abisko, the first
+   expedition north, in planning; each with a link to its trip.
 3. The night train on home, drawn along the real line through its stations (1,440 km to Abisko), and
    the route on every trip page, drawn by scrolling.
 4. The archive map: photographs grow out of the points.
-5. Activities: the terrain drifts (Hiking), granite crosses the headline (Climbing), the white takes the
-   page (Alpine), the page goes cold (Winter), every route draws at once (Expeditions).
+5. Activities: the terrain drifts (Hiking), the white takes the page (Mountaineering), the page goes
+   cold (Winter), every route draws at once (Expeditions).
 
 ## System
 
@@ -104,7 +104,7 @@ Newsreader for statements, Schibsted Grotesk for information, 12 columns, hairli
 ## Performance
 
 One rAF loop for the whole site, asleep unless something moves; every canvas stops off screen; the
-relief and the rock render only when their input changed; heightmaps load as their section comes near
+relief renders only when its input changed; heightmaps load as their section comes near
 (the intro's is preloaded).
 
 The intro draws each frame in under 10 ms on the CPU and only when the scroll moves it; scrolling through it holds 60 fps on an M4. Photographs come at four widths

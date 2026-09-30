@@ -1,228 +1,170 @@
 {
-  "_note": "Source of truth for every page. Coordinates, heights and places are real; dates, group sizes, places left, costs and itineraries are illustrative until the board confirms them. Rebuild with: python3 site/tools/build_assets.py routes && python3 site/tools/build_pages.py",
-  "club": { "founded": 2026, "members": 58 },
+  "_note": "Source of truth for every page. The completed trips are the club’s own; the planned expeditions (006, 007) are plans: their routes, group sizes, costs and itineraries are illustrative until the board confirms them. Rebuild with site/tools/build_pages.py.",
+  "club": {
+    "founded": 2026,
+    "members": 58
+  },
   "expeditions": [
     {
-      "no": "001",
-      "slug": "001-tyresta",
-      "name": "Tyresta",
-      "region": "Tyresta National Park, Haninge",
-      "lat": 59.1833,
-      "lon": 18.3,
       "status": "completed",
       "year": 2026,
-      "dates": "14 March 2026",
-      "short": "Mar 2026",
       "days": 1,
       "category": "Forest · Day hike",
       "discipline": "hiking",
       "difficulty": 1,
       "difficultyLabel": "Easy",
-      "distance_km": 16,
-      "ascent_m": 240,
-      "high_m": 83,
-      "highName": "Tyresta ridge",
-      "group": 24,
-      "terrain": "Old pine forest, granite ridges, the area burnt in 1999, boardwalks over bogs",
-      "transport": "Bus 834 from Gullmarsplan, one hour",
-      "climate": "Early March: −4 to +3 °C, frozen lakes, 11 hours of daylight",
-      "note": "A day hike through Tyresta National Park, one hour from central Stockholm by bus. Old pine forest, granite ridges and quiet lakes, and a good first trip with the club.",
-      "log": [
-        [
-          "07:40",
-          "Meeting point at Gullmarsplan; bus 834 towards Tyresta."
-        ],
-        [
-          "09:05",
-          "Start at Tyresta village, by the national park entrance."
-        ],
-        [
-          "12:30",
-          "Lunch break on the rocks above Årsjön."
-        ],
-        [
-          "15:50",
-          "Back at the village after 16 km."
+      "no": "001",
+      "slug": "001-paradiset",
+      "name": "Paradiset",
+      "region": "Paradiset Nature Reserve, Huddinge",
+      "lat": 59.1578,
+      "lon": 18.0442,
+      "dates": "15 August 2026",
+      "short": "Aug 2026",
+      "terrain": "Huddinge’s largest continuous forest: pine and spruce, mires and small lakes, with Sörmlandsleden running through it",
+      "note": "The club’s first trip: a day hike in Paradiset, the largest continuous forest in Huddinge, south of the city. Pine and spruce, mires and small lakes, and a stretch of Sörmlandsleden.",
+      "images": {
+        "hero": "club-pine-trail",
+        "gallery": [
+          [
+            "club-pine-trail",
+            "001.1",
+            "On the trail."
+          ]
         ]
-      ],
+      }
+    },
+    {
+      "status": "completed",
+      "year": 2026,
+      "days": 1,
+      "category": "Forest and shore · Day hike",
+      "discipline": "hiking",
+      "difficulty": 1,
+      "difficultyLabel": "Easy",
+      "no": "002",
+      "slug": "002-bogesundslandet",
+      "name": "Bogesundslandet",
+      "region": "Bogesundslandet Nature Reserve, Vaxholm",
+      "lat": 59.404,
+      "lon": 18.2276,
+      "dates": "11 September 2026",
+      "short": "Sep 2026",
+      "terrain": "Mixed and broadleaf forest, old farmland and long shorelines on Stora Värtan, with Bogesund Castle",
+      "note": "A day hike on Bogesundslandet in Vaxholm, north-east of the city: mixed forest, open farmland and long shorelines, past Bogesund Castle.",
+      "images": {
+        "hero": "forest-autumn-shore",
+        "gallery": [
+          [
+            "forest-autumn-shore",
+            "002.1",
+            "Along the shore."
+          ]
+        ]
+      }
+    },
+    {
+      "status": "completed",
+      "year": 2026,
+      "days": 1,
+      "category": "Forest · Day hike",
+      "discipline": "hiking",
+      "difficulty": 1,
+      "difficultyLabel": "Easy",
+      "no": "003",
+      "slug": "003-tyresta",
+      "name": "Tyresta",
+      "region": "Tyresta National Park, Haninge",
+      "lat": 59.1833,
+      "lon": 18.3,
+      "dates": "20 September 2026",
+      "short": "Sep 2026",
+      "terrain": "Old pine forest, granite ridges, the area burnt in 1999, boardwalks over bogs",
+      "note": "A day hike through Tyresta National Park, south-east of Stockholm: old pine forest, granite ridges and quiet lakes.",
       "images": {
         "hero": "club-lake-cliff",
         "gallery": [
           [
             "club-lake-cliff",
-            "001.1",
+            "003.1",
             "The group above the lake."
           ],
           [
             "club-spruce-file",
-            "001.2",
-            "On the trail through the spruce forest."
-          ],
-          [
-            "forest-pines-lake",
-            "001.3",
-            "Pine forest by the bog."
+            "003.2",
+            "Single file through the spruce forest."
           ]
         ]
       }
     },
     {
-      "no": "002",
-      "slug": "002-kebnekaise",
-      "name": "Kebnekaise",
-      "region": "Kebnekaise massif, Kiruna",
-      "lat": 67.9044,
-      "lon": 18.5283,
       "status": "completed",
       "year": 2026,
-      "dates": "21–24 August 2026",
-      "short": "Aug 2026",
-      "days": 4,
-      "category": "Alpine · Summit",
-      "discipline": "alpine",
-      "difficulty": 4,
-      "difficultyLabel": "Demanding",
-      "distance_km": 18,
-      "ascent_m": 1900,
-      "high_m": 2097,
-      "highName": "Kebnekaise north top",
-      "group": 12,
-      "terrain": "Moraine, scree, the Vierranvárri shoulder, a snow ridge to the top",
-      "transport": "Night train to Kiruna, bus to Nikkaluokta, 19 km on foot to the mountain station",
-      "climate": "Late August: 0 to +12 °C at the station, below zero on the summit ridge, wind",
-      "note": "Four days to Sweden’s highest mountain, with the summit day on the western route from the Kebnekaise mountain station.",
-      "map": "kebnekaise",
-      "relief": "kebnekaise",
-      "route": [
-        [
-          67.868,
-          18.6198
-        ],
-        [
-          67.87,
-          18.57
-        ],
-        [
-          67.881,
-          18.535
-        ],
-        [
-          67.895,
-          18.525
-        ],
-        [
-          67.9044,
-          18.5283
-        ]
-      ],
-      "log": [
-        [
-          "03:50",
-          "Departure from the Kebnekaise mountain station (690 m)."
-        ],
-        [
-          "07:10",
-          "Vierranvárri (1,711 m) and the first view of the summit ridge."
-        ],
-        [
-          "10:40",
-          "The summit, 2,097 m."
-        ],
-        [
-          "18:20",
-          "Back at the mountain station after 18 km and 1,900 m of ascent."
-        ]
-      ],
-      "images": {
-        "hero": "kebnekaise-ridge",
-        "gallery": [
-          [
-            "kebnekaise-ridge",
-            "002.1",
-            "The last ridge to the top."
-          ],
-          [
-            "kebnekaise-moraine",
-            "002.2",
-            "Storglaciären from the moraine."
-          ]
-        ]
-      },
-      "summits": [
-        4
-      ]
-    },
-    {
-      "no": "003",
-      "slug": "003-stockholm-archipelago",
-      "name": "Stockholm Archipelago",
-      "place": "Landsort, Öja",
-      "region": "Öja, the southern archipelago",
-      "lat": 58.7396,
-      "lon": 17.8658,
-      "status": "completed",
-      "year": 2026,
-      "dates": "12–13 September 2026",
-      "short": "Sep 2026",
-      "days": 2,
-      "category": "Coast · Two days",
+      "days": 1,
+      "category": "Island · Day hike",
       "discipline": "hiking",
       "difficulty": 1,
       "difficultyLabel": "Easy",
-      "distance_km": 11,
-      "ascent_m": 120,
-      "high_m": 17,
-      "highName": "The lighthouse rock",
-      "group": 18,
-      "terrain": "Ice-polished granite shore, heath, pine, the old pilot station",
-      "transport": "Commuter train to Nynäshamn, bus to Ankarudden, boat to Öja",
-      "climate": "Mid-September: +9 to +16 °C, westerlies, cold water",
-      "note": "A two-day coastal hike on Öja (Landsort), the southernmost island of the Stockholm archipelago, with a night at the old pilot station by Sweden’s oldest lighthouse.",
-      "log": [
-        [
-          "08:15",
-          "Commuter train to Nynäshamn."
-        ],
-        [
-          "11:00",
-          "Arrival on Öja and a walk around the island."
-        ],
-        [
-          "21:30",
-          "Overnight stay at the pilot station."
-        ],
-        [
-          "14:40",
-          "Boat back to the mainland after 11 km."
-        ]
-      ],
+      "no": "004",
+      "slug": "004-lovo",
+      "name": "Lovö",
+      "region": "Lovö Nature Reserve, Drottningholm, Ekerö",
+      "lat": 59.324,
+      "lon": 17.854,
+      "dates": "26 September 2026",
+      "short": "Sep 2026",
+      "terrain": "Oak woods, old pastures, fields and shoreline on Lovön in Lake Mälaren, by Drottningholm Palace",
+      "note": "A day hike on Lovön, the island of Drottningholm Palace in Lake Mälaren: oak woods, old pastures and shoreline in the Lovö nature reserve.",
       "images": {
-        "hero": "archipelago-lighthouse",
+        "hero": "forest-lake-frame",
         "gallery": [
           [
-            "archipelago-lighthouse",
-            "003.1",
-            "Landsort, the last island south."
-          ],
-          [
-            "archipelago-granite",
-            "003.2",
-            "Granite polished by the ice."
+            "forest-lake-frame",
+            "004.1",
+            "By the water."
           ]
         ]
       }
     },
     {
-      "no": "004",
-      "slug": "004-abisko",
+      "status": "completed",
+      "year": 2026,
+      "days": 1,
+      "category": "Forest · Day hike",
+      "discipline": "hiking",
+      "difficulty": 1,
+      "difficultyLabel": "Easy",
+      "no": "005",
+      "slug": "005-kungsangen",
+      "name": "Kungsängen",
+      "region": "Kungsängen, Upplands-Bro",
+      "lat": 59.4783,
+      "lon": 17.7494,
+      "dates": "30 September 2026",
+      "short": "Sep 2026",
+      "note": "A day hike at Kungsängen in Upplands-Bro, north-west of Stockholm.",
+      "images": {
+        "hero": "forest-pines-lake",
+        "gallery": [
+          [
+            "forest-pines-lake",
+            "005.1",
+            "Pines by the lake."
+          ]
+        ]
+      }
+    },
+    {
+      "no": "006",
+      "slug": "006-abisko",
       "name": "Abisko",
       "region": "Abisko National Park, Norrbotten",
       "lat": 68.3495,
       "lon": 18.8312,
-      "status": "registering",
-      "year": 2026,
-      "dates": "17–19 October 2026",
-      "short": "Oct 2026",
+      "status": "planned",
+      "year": 2027,
+      "dates": "Dates to be announced",
+      "short": "Planned",
       "days": 3,
       "category": "Fell · Three days",
       "discipline": "expeditions",
@@ -233,14 +175,12 @@
       "high_m": 1169,
       "highName": "Njullá",
       "group": 16,
-      "placesLeft": 5,
-      "closes": "3 October",
       "terrain": "Birch forest, the Abisko canyon, open fell, the Njullá ridge",
       "transport": "Night train from Stockholm Central to Abisko Turiststation, about 17 hours",
-      "climate": "Mid-October: −5 to +4 °C, the first snow on the mountains, about nine hours of daylight, northern lights on clear nights",
+      "climate": "Autumn and early winter: below zero at night, the first snow on the mountains, northern lights on clear nights",
       "cost": "Train, huts and food at cost, listed when registration closes",
       "leaders": "Two club trip leaders; a certified guide for the Njullá ridge",
-      "note": "Three days in Abisko National Park in October: birch forest, the Abisko valley and the Njullá ridge, with the first snow on the mountains.",
+      "note": "The club’s first expedition north, in planning: three days in Abisko National Park, with birch forest, the Abisko valley and the Njullá ridge. Members hear first when the dates are set.",
       "map": "abisko",
       "relief": "abisko",
       "route": [
@@ -332,17 +272,17 @@
         "gallery": [
           [
             "abisko-lapporten-figure",
-            "004.1",
+            "006.1",
             "Lapporten from the frozen shore of Torneträsk, midwinter."
           ],
           [
             "abisko-lapporten-winter",
-            "004.2",
+            "006.2",
             "Lapporten under a pink evening."
           ],
           [
             "abisko-moon-ridge",
-            "004.3",
+            "006.3",
             "Moonrise over the Abisko fells."
           ]
         ]
@@ -352,16 +292,16 @@
       ]
     },
     {
-      "no": "005",
-      "slug": "005-sarek",
+      "no": "007",
+      "slug": "007-sarek",
       "name": "Sarek",
       "region": "Sarek National Park, Jokkmokk",
       "lat": 67.2833,
       "lon": 17.7,
-      "status": "announced",
+      "status": "planned",
       "year": 2027,
-      "dates": "12–18 March 2027",
-      "short": "Mar 2027",
+      "dates": "Dates to be announced",
+      "short": "Planned",
       "days": 7,
       "category": "Winter · Seven days",
       "discipline": "winter",
@@ -372,24 +312,23 @@
       "high_m": 1520,
       "highName": "Sarvesvágge pass",
       "group": 8,
-      "opens": "1 December",
       "terrain": "No marked trails or huts: frozen valleys and mountain passes on skis",
       "transport": "Night train to Gällivare, bus to Kvikkjokk, then on ski",
       "climate": "March: −20 to −2 °C, long light, storms that last days",
       "cost": "Listed in the dossier",
       "leaders": "Two certified mountain leaders; ski touring experience required",
-      "note": "A week-long ski tour through Sarek National Park in March, with tents and pulks. For members who have joined a winter trip with the club before.",
+      "note": "A planned week-long ski tour through Sarek National Park in late winter, with tents and pulks. For members who have joined a winter trip with the club first.",
       "images": {
         "hero": "expedition-tracks",
         "gallery": [
           [
             "expedition-tracks",
-            "005.1",
+            "007.1",
             "Sarvesvágge in March."
           ],
           [
             "winter-valley",
-            "005.2",
+            "007.2",
             "One skier, the whole valley."
           ]
         ]
@@ -405,35 +344,25 @@
       "level": "Open to all",
       "group": "10–25",
       "equipment": "Boots, shell, a day pack",
-      "text": "Day hikes on trails such as Sörmlandsleden and Roslagsleden, within an hour of Stockholm. Regular trips throughout the year.",
+      "text": "Day hikes in the nature reserves around Stockholm, such as Tyresta, Paradiset, Bogesundslandet and Lovö, most of them reachable by public transport. Regular trips through the year.",
       "past": [
         "001",
-        "003"
+        "002",
+        "003",
+        "004",
+        "005"
       ]
     },
     {
-      "key": "climbing",
-      "name": "Climbing",
-      "img": "climbing-wall",
-      "season": "All year",
-      "level": "Belay course provided",
-      "group": "6–12",
-      "equipment": "Harness and shoes, lent by the club",
-      "text": "Indoor climbing during the darker months and outdoor climbing on granite south of Stockholm from May. Belay courses are offered for beginners.",
-      "past": []
-    },
-    {
-      "key": "alpine",
-      "name": "Alpine",
+      "key": "mountaineering",
+      "name": "Mountaineering",
       "img": "alpine-crevasse",
-      "season": "July – September",
-      "level": "Experience required",
-      "group": "4–12",
-      "equipment": "Crampons, axe, helmet, harness",
-      "text": "Glacier travel and summit trips in the Swedish mountains, always led by certified mountain guides, with at most six people per rope team.",
-      "past": [
-        "002"
-      ]
+      "season": "Summer and winter",
+      "level": "Some experience",
+      "group": "6–12",
+      "equipment": "Boots, crampons and ice axe where needed",
+      "text": "Trips to the Swedish mountains above the tree line: long days on foot, summits, and in winter crampons and ice axe. Planned with experienced members and, where the route needs it, certified guides.",
+      "past": []
     },
     {
       "key": "winter",
@@ -444,24 +373,18 @@
       "group": "8–16",
       "equipment": "Snowshoes or skis, a thermos",
       "text": "Snowshoeing, ski touring and walks on frozen lakes during the winter months.",
-      "past": [
-        "005"
-      ]
+      "past": []
     },
     {
       "key": "expeditions",
       "name": "Expeditions",
       "img": "winter-fells",
-      "season": "Twice a year",
+      "season": "Once or twice a year",
       "level": "Varies by trip",
       "group": "8–16",
       "equipment": "Listed on each trip page",
-      "text": "Multi-day trips to the Swedish mountains, travelling by night train and staying in mountain huts or tents. Two to three trips a year.",
-      "past": [
-        "002",
-        "004",
-        "005"
-      ]
+      "text": "Multi-day trips to the Swedish mountains, travelling by night train and staying in mountain huts or tents. The first, to Abisko, is in planning.",
+      "past": []
     }
   ]
 }

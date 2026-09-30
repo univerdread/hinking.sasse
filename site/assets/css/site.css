@@ -399,7 +399,7 @@ details[open]::details-content { height: auto; }
 .status { display: inline-flex; align-items: center; gap: 10px; font-size: var(--t-label); font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
 .status i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid currentColor; }
 .status--registering i { background: var(--rope); border-color: var(--rope); }
-.status--announced i { background: currentColor; opacity: .5; }
+.status--announced i, .status--planned i { background: currentColor; opacity: .5; }
 
 /* ------------------------------------------------------------------ home: the statement (Moment 02) */
 .statement { position: relative; background: var(--paper); }
@@ -463,6 +463,7 @@ details[open]::details-content { height: auto; }
 .scandi-pt--announced circle:first-child { fill: none; stroke: var(--fg); stroke-width: 1; }
 .scandi-pt.is-on .scandi-ring, .scandi-pt:hover .scandi-ring { opacity: 1; r: 14px; }
 .scandi-home rect { fill: var(--fg); }
+.scandi-home .scandi-near { fill: var(--mute); font-size: 11px; }
 .scandi-head circle:first-child { fill: none; stroke: var(--rope); stroke-width: 1; }
 .scandi-head circle:last-child { fill: var(--rope); }
 [data-theme="navy"] .scandi-base, [data-theme="pine"] .scandi-base { filter: invert(1); opacity: .5; }
@@ -494,7 +495,7 @@ details[open]::details-content { height: auto; }
    its photograph wipes in beside it. Hover previews one; a click carries its photograph to its page. */
 /* what we do: five cards in a row, every photograph in view; a sideways swipe on small screens */
 .home-disc { background: var(--bg); color: var(--fg); }
-.disc-cards { display: grid; grid-template-columns: repeat(5, 1fr); column-gap: clamp(14px, 1.6vw, 28px); margin-top: clamp(28px, 4vw, 56px); }
+.disc-cards { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; column-gap: clamp(14px, 1.6vw, 28px); margin-top: clamp(28px, 4vw, 56px); }
 .disc-cards a { display: grid; align-content: start; height: 100%; }
 .disc-shot { aspect-ratio: 4 / 5; margin: 0 0 18px; }
 .disc-shot img { transform: scale(1.001); transition: transform 1.4s var(--ease), filter .8s var(--ease); filter: saturate(.92) brightness(.94); }
@@ -661,7 +662,7 @@ details[open]::details-content { height: auto; }
 .act:nth-of-type(even) .act-img { grid-column: 8 / 13; }
 .act:nth-of-type(even) .act-text { grid-column: 1 / 7; }
 .act-text > .label { color: var(--mute); }
-.act-h { font-family: var(--serif); font-weight: 300; font-size: clamp(64px, 10vw, 196px); line-height: .85; letter-spacing: -.05em; font-variation-settings: "opsz" 72; margin-left: -.05em; }
+.act-h { font-family: var(--serif); font-weight: 300; font-size: clamp(48px, min(10vw, 77vw / var(--n, 6)), 196px); line-height: .85; letter-spacing: -.05em; font-variation-settings: "opsz" 72; margin-left: -.05em; }   /* --n: letters, so a long name still fits its column */
 .act-lead { max-width: 36ch; font-size: var(--t-lead); line-height: 1.35; }
 .act-dl { display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--gut); border-top: 1px solid var(--rule); }
 .act-dl > div { padding: 12px 0; border-bottom: 1px solid var(--rule); }
@@ -672,14 +673,10 @@ details[open]::details-content { height: auto; }
 .act-past ul { display: flex; gap: 18px; flex-wrap: wrap; }
 /* hiking: the terrain drifts behind the words */
 .act-contours { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--ink); z-index: 0; }
-/* climbing: a piece of granite crosses the composition, behind the headline */
-.rock { position: absolute; z-index: 2; width: min(34vw, 480px); aspect-ratio: 1; top: 30%; left: 50%; pointer-events: none;
-  transform: translate(calc(-50% + (0.5 - var(--p, 0)) * 70vw), calc(-50% + (var(--p, 0) - .5) * -10vh)); }
-.act--climbing .act-lead, .act--climbing .act-dl, .act--climbing .act-past { position: relative; z-index: 4; }
-/* alpine: the white expands out of the photograph until it is the page */
+/* mountaineering: the white expands out of the photograph until it is the page */
 .act-white { position: absolute; inset: 0; z-index: 2; background: var(--paper); pointer-events: none;
   clip-path: inset(calc(50% - (var(--p, 0) - .35) * 130%) calc(50% - (var(--p, 0) - .35) * 130%)); }
-.act--alpine .act-text { z-index: 4; }
+.act--mountaineering .act-text { z-index: 4; }
 /* winter: the page itself goes cold and low-contrast */
 .act--winter { background: color-mix(in srgb, var(--paper), #D6DEE4 calc(min(1, var(--p, 0) * 2.2) * 100%)); }
 .act--winter .act-img img { filter: saturate(calc(1 - var(--p, 0) * .7)) brightness(calc(1 + var(--p, 0) * .08)); }
@@ -758,7 +755,7 @@ details[open]::details-content { height: auto; }
   .disc-cards li { flex: 0 0 min(72vw, 320px); scroll-snap-align: start; }
   .disc-word { font-size: clamp(30px, 8vw, 40px); }
   .dossier-row-img { grid-column: 1 / 5; }
-  .act-h { font-size: clamp(56px, 9vw, 120px); }
+  .act-h { font-size: clamp(44px, min(9vw, 77vw / var(--n, 6)), 120px); }
 }
 @media (max-width: 860px) {
   .nav-links { justify-content: flex-start; }
@@ -828,8 +825,7 @@ details[open]::details-content { height: auto; }
   .act-pin { position: relative; height: auto; min-height: 100svh; grid-template-columns: 1fr; padding: 96px var(--m) 72px; row-gap: 32px; }
   .act-img, .act:nth-of-type(even) .act-img, .act--expeditions .act-img { grid-column: 1; grid-row: 1; height: 46svh; }
   .act-text, .act:nth-of-type(even) .act-text, .act--expeditions .act-text { grid-column: 1; grid-row: 2; }
-  .act-h { font-size: clamp(56px, 16vw, 96px); }
-  .rock { width: 80vw; top: 30%; }
+  .act-h { font-size: clamp(36px, min(16vw, 170vw / var(--n, 6)), 96px); }
   .act-map { opacity: .35; height: 70svh; }
 
   .rule-scene { padding-left: calc(8% + 36px); min-height: 80svh; }

@@ -24,7 +24,8 @@ IMGS = json.loads((SITE / "data/images.json").read_text())
 SITE_URL = "https://univerdread.github.io/hinking.sasse/"
 esc = html.escape
 
-STATUS = {"registering": "Registering", "announced": "Announced", "completed": "Completed"}
+STATUS = {"registering": "Registering", "announced": "Announced", "planned": "Planned", "completed": "Completed"}
+NUMBER = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
 SSE = (59.3417, 18.0572)
 
 
@@ -136,7 +137,7 @@ def head(d, title, desc, page, scripts=(), preload=()):
 
 
 def header(d, current):
-    nxt = next(e for e in EXP if e["status"] == "registering")
+    nxt = next(e for e in EXP if e["status"] != "completed")
     links = "".join(
         f'<a href="{u(d, p)}"{" aria-current=" + chr(34) + "page" + chr(34) if current == p else ""}><span class="nav-no tnum">0{i + 1}</span><span class="nav-t">{t}</span></a>'
         for i, (p, t) in enumerate(NAV))
@@ -176,7 +177,7 @@ CREDITS = credits_html()
 
 
 def footer(d):
-    nxt = next(e for e in EXP if e["status"] == "registering")
+    nxt = next(e for e in EXP if e["status"] != "completed")
     return f"""<footer class="footer" data-theme="pine">
   <div class="footer-top">
     <svg class="footer-logo" viewBox="0 0 304.4 100" role="img" aria-label="Hiking Club"><use href="#lockup-h"/></svg>
@@ -210,13 +211,13 @@ def grade(n):
 
 
 def status_tag(e):
-    extra = {"registering": f" · {e.get('placesLeft', '')} places left", "announced": f" · opens {e.get('opens', '')}", "completed": ""}[e["status"]]
+    extra = {"registering": f" · {e.get('placesLeft', '')} places left", "announced": f" · opens {e.get('opens', '')}", "planned": "", "completed": ""}[e["status"]]
     return f'<span class="status status--{e["status"]}"><i aria-hidden="true"></i>{STATUS[e["status"]]}{esc(extra)}</span>'
 
 
 def route_km(e):
     r = DER.get("routes", {}).get(e["slug"])
-    return r["km"] if r else e["distance_km"]
+    return r["km"] if r else e.get("distance_km")
 
 
 def exp_url(d, e):
@@ -231,7 +232,7 @@ def log_row(d, e, cls=""):
     <span class="log-no tnum">{e['no']}</span>
     <span class="log-name">{esc(e['name'])}</span>
     <span class="log-coord">{esc(e["region"])}</span>
-    <span class="log-alt tnum">+{e['high_m']:,} m</span>
+    <span class="log-alt tnum">{f"+{e['high_m']:,} m" if e.get("high_m") else ""}</span>
     <span class="log-cat">{esc(e['category'])}</span>
     <span class="log-date tnum">{e['short']}</span>
     <span class="log-plus log-up" aria-hidden="true">→</span>
@@ -243,8 +244,9 @@ def log_row(d, e, cls=""):
 RAIL_KM = 1440   # Stockholm C – Abisko by rail: about 1,500 km to Narvik, less the 58 km from Abisko
 
 
-def scandi_overlay(d, focus=None, routes=True, mode="north", rail=False):
+def scandi_overlay(d, focus=None, routes=True, mode="north", rail=False, done=False):
     S = DER["scandinavia"]; w, h = S["w"], S["h"]
+    EXP_ = [e for e in EXP if e["status"] == "completed"] if done else EXP
     sx, sy = S["stockholm"]
     out = [f'<svg class="scandi-overlay" viewBox="0 0 {w} {h}" aria-hidden="true">']
     if rail:
@@ -255,7 +257,7 @@ def scandi_overlay(d, focus=None, routes=True, mode="north", rail=False):
         for st in R["stops"][1:-1]:
             if st["label"]:
                 out.append(f'<g class="scandi-stop" data-t="{st["t"]}" transform="translate({st["x"]} {st["y"]})"><circle r="2.6"/><text x="-10" y="4" text-anchor="end">{esc(st["name"])}</text></g>')
-    for e in EXP:
+    for e in EXP_:
         x, y = S["points"][e["slug"]]
         if routes and not rail and (focus is None or e["no"] == focus):
             # a quiet arc bowing west, like a line drawn with a ruler that gave way
@@ -264,21 +266,24 @@ def scandi_overlay(d, focus=None, routes=True, mode="north", rail=False):
             L = math.hypot(dx, dy) or 1
             cx, cy = mx + dy / L * L * 0.18, my - dx / L * L * 0.18
             out.append(f'<path class="scandi-route{" is-focus" if e["no"] == focus else ""}" pathLength="1" d="M{sx:.1f} {sy:.1f} Q{cx:.1f} {cy:.1f} {x:.1f} {y:.1f}"/>')
-    for e in EXP:
+    # the day hikes all lie within an hour of the school: at this scale they share one label
+    local = [e for e in EXP_ if hav(SSE, (e["lat"], e["lon"])) < 80]
+    for e in EXP_:
         x, y = S["points"][e["slug"]]
-        out.append(f'<g class="scandi-pt scandi-pt--{e["status"]}" data-no="{e["no"]}" transform="translate({x} {y})"><circle r="3.2"/><circle class="scandi-ring" r="9"/>'
-                   f'<text x="14" y="4">{e["no"]} {esc(e["name"])}</text></g>')
-    out.append(f'<g class="scandi-home" transform="translate({sx} {sy})"><rect x="-3.5" y="-3.5" width="7" height="7"/><text x="12" y="4">Stockholm · SSE</text></g>')
+        label = "" if e in local else f'<text x="14" y="4">{e["no"]} {esc(e["name"])}</text>'
+        out.append(f'<g class="scandi-pt scandi-pt--{e["status"]}" data-no="{e["no"]}" transform="translate({x} {y})"><circle r="3.2"/><circle class="scandi-ring" r="9"/>{label}</g>')
+    near_txt = f'<text class="scandi-near" x="12" y="20">{NUMBER[len(local)].lower()} day hikes nearby</text>' if local else ""
+    out.append(f'<g class="scandi-home" transform="translate({sx} {sy})"><rect x="-3.5" y="-3.5" width="7" height="7"/><text x="12" y="4">Stockholm · SSE</text>{near_txt}</g>')
     out.append("</svg>")
     return "".join(out)
 
 
-def scandi(d, focus=None, routes=True, cls="", rail=False):
+def scandi(d, focus=None, routes=True, cls="", rail=False, done=False):
     S = DER["scandinavia"]
     alt = "Map of Sweden with the night train's route from Stockholm to Abisko." if rail else "Map of Scandinavia: coastline and mountain contours."
     return (f'<div class="scandi {cls}" style="aspect-ratio: {S["w"]} / {S["h"]}">'
             f'<img class="scandi-base" src="{u(d)}site/assets/map/scandinavia.svg" width="{S["w"]}" height="{S["h"]}" loading="lazy" alt="{alt}">'
-            f'{scandi_overlay(d, focus, routes, rail=rail)}</div>')
+            f'{scandi_overlay(d, focus, routes, rail=rail, done=done)}</div>')
 
 
 def relief(d, name, route=None, mode="object", label=True):
@@ -334,7 +339,7 @@ def intro():
 
     <ol class="intro-lines" aria-hidden="true">
       <li data-at="0.09 0.33">The hiking and outdoor club of the Student Association at the Stockholm School of Economics.</li>
-      <li data-at="0.37 0.6">Day hikes around Stockholm, climbing through the year, and expeditions to the Swedish mountains.</li>
+      <li data-at="0.37 0.6">Day hikes in the nature reserves around Stockholm, and trips to the Swedish mountains.</li>
       <li data-at="0.64 0.84">Open to every SSE student. No experience required.</li>
     </ol>
     <div class="intro-cue" aria-hidden="true"><span>Scroll</span><i></i></div>
@@ -351,7 +356,7 @@ def intro():
 
 
 # the places the destinations model visits, in order of distance from the school
-TOUR = {"001": ("tyresta", 0.5), "003": ("archipelago", 0.5), "005": ("sarek", None), "002": ("kebnekaise", None), "004": ("abisko", 352)}
+TOUR = {"001": ("paradiset", None), "002": ("bogesund", 0.5), "003": ("tyresta", 0.5), "004": ("lovo", 2.5), "005": ("kungsangen", 1.5), "006": ("abisko", 352)}
 
 
 def tour(d):
@@ -362,7 +367,7 @@ def tour(d):
         dist = hav(SSE, (e["lat"], e["lon"]))
         far = f"{round(dist, -1):,.0f} km north" if dist > 300 else f"{round(dist, -1):,.0f} km from SSE"
         length = f'{e["days"]} days' if e["days"] > 1 else "Day hike"
-        when = {"registering": f'Next trip · {e["dates"]}', "announced": f'Planned · {e["dates"]}', "completed": e["dates"]}[e["status"]]
+        when = {"registering": f'Next trip · {e["dates"]}', "announced": f'Planned · {e["dates"]}', "planned": "Planned", "completed": e["dates"]}[e["status"]]
         places.append(dict(src=u(d, f"site/assets/terrain/{name}.png"), min=t["min"], max=t["max"], km=t["km"], water=water))
         caps.append(f'<li data-tour-cap><a href="{exp_url(d, e)}"><span class="label tnum">{e["no"]} · {length} · {far}</span>'
                     f'<span class="tour-name">{esc(e["name"])}</span><span class="tour-when small">{when}</span></a></li>')
@@ -371,19 +376,19 @@ def tour(d):
 
 def home():
     d = 0
-    nxt = BY["004"]
+    nxt = next(e for e in EXP if e["status"] != "completed")
     S = DER["scandinavia"]
     first = lambda t: t.split(". ")[0].rstrip(".") + "."
     acts = "".join(f'<li data-reveal style="--i:{i}"><a href="{u(d, "activities/")}#{a["key"]}">'
-                   f'<figure class="disc-shot frame" data-vt="act-{a["key"]}">{img(d, a["img"], a["name"], "(min-width: 1100px) 19vw, (min-width: 700px) 30vw, 72vw", frame=4 / 5)}</figure>'
+                   f'<figure class="disc-shot frame" data-vt="act-{a["key"]}">{img(d, a["img"], a["name"], "(min-width: 1100px) 23vw, (min-width: 700px) 30vw, 72vw", frame=4 / 5)}</figure>'
                    f'<p class="disc-meta label"><span class="tnum">0{i + 1}</span>{esc(a["season"])}</p>'
                    f'<h3 class="disc-word">{a["name"]}</h3><p class="disc-text">{esc(first(a["text"]))}</p>'
                    f'<p class="disc-level label">{esc(a["level"])}</p></a></li>' for i, a in enumerate(ACT))
-    rows = "".join(log_row(d, BY[n]) for n in ("002", "003", "001"))
+    rows = "".join(log_row(d, e) for e in [e for e in EXP if e["status"] == "completed"][::-1][:3])
     tour_json, tour_caps = tour(d)
     done = len([e for e in EXP if e["status"] == "completed"])
     return (head(d, "Hiking Club — SASSE, Stockholm School of Economics",
-                 "Hiking Club is the outdoor club of SASSE, the Student Association at the Stockholm School of Economics. Day trails, rock, ice and the long way north.",
+                 "Hiking Club is the outdoor club of SASSE, the Student Association at the Stockholm School of Economics: day hikes around Stockholm, and the mountains in the north.",
                  "home", ("contours", "relief", "intro"), preload=("site/assets/terrain/abisko.png",))
             + header(d, "") + intro() + f"""
 <main id="main">
@@ -409,13 +414,13 @@ def home():
     </dl>
     <div class="statement-text">
       <p class="lead" data-reveal>Hiking Club is the hiking and outdoor club of SASSE, the Student Association at the Stockholm School of Economics.</p>
-      <p data-reveal>We organise day hikes around Stockholm, climbing throughout the year, and trips to the Swedish mountains. Every trip is planned and led by experienced members, and beginners are always welcome.</p>
+      <p data-reveal>We organise day hikes in the nature reserves around Stockholm, and are planning winter trips and expeditions to the Swedish mountains. Every trip is planned and led by experienced members, and beginners are always welcome.</p>
     </div>
   </div>
 </section>
 
 <section class="section next" data-theme="paper" aria-labelledby="next-title">
-  {rowhead("01", "Next trip", status_tag(nxt))}
+  {rowhead("01", "Next expedition", status_tag(nxt))}
   <a class="next-card" href="{exp_url(d, nxt)}">
     <figure class="next-img frame" data-reveal="image"><div class="para" data-speed="0.08">{img(d, nxt["images"]["hero"], "A single hiker in a red jacket on snow facing Lapporten.", "(min-width: 900px) 62vw, 100vw", vt="exp-004", frame=3 / 2)}</div></figure>
     <div class="next-meta">
@@ -437,19 +442,19 @@ def home():
     <div class="north-text">
       {rowhead("02", "Getting there", "By night train")}
       <h2 id="north-title" class="h-lg"><span class="tnum" data-north-km>0</span> km by night train.</h2>
-      <p class="north-lead">Our mountain trips start at the school. The night train leaves Stockholm Central in the evening and arrives in Abisko, north of the Arctic Circle, the next morning.</p>
+      <p class="north-lead">Our trips to the mountains will start at the school. The night train leaves Stockholm Central in the evening and arrives in Abisko, north of the Arctic Circle, the next morning.</p>
       <dl class="north-read" aria-hidden="true">
         <div><dt>Departs</dt><dd>Stockholm C, evening</dd></div>
         <div><dt>Arrives</dt><dd>Abisko, next morning</dd></div>
         <div><dt>Journey</dt><dd>About 17 hours</dd></div>
       </dl>
     </div>
-    <div class="north-map" data-north data-km="{RAIL_KM}">{scandi(d, "004", True, rail=True)}</div>
+    <div class="north-map" data-north data-km="{RAIL_KM}">{scandi(d, nxt["no"], True, rail=True)}</div>
   </div>
 </section>
 
 <section class="section home-disc" data-theme="pine" aria-label="What we do">
-  {rowhead("03", "What we do", "Five activities", h2=True)}
+  {rowhead("03", "What we do", f"{NUMBER[len(ACT)]} activities", h2=True)}
   <ol class="disc-cards">{acts}</ol>
   <a class="link home-more" href="{u(d, "activities/")}">All activities →</a>
 </section>
@@ -523,18 +528,18 @@ def expeditions():
     <span class="dossier-row-status">{status_tag(e)}</span>
     <dl class="dossier-row-dl tnum">
       <div><dt>Difficulty</dt><dd>{grade(e["difficulty"])}{e["difficultyLabel"]}</dd></div>
-      <div><dt>Distance</dt><dd>{km(route_km(e))} km</dd></div>
-      <div><dt>High point</dt><dd>+{e["high_m"]:,} m</dd></div>
-      <div><dt>Group</dt><dd>{e["group"]}{" · " + str(e["placesLeft"]) + " left" if e.get("placesLeft") else ""}</dd></div>
+      {f'<div><dt>Distance</dt><dd>{km(route_km(e))} km</dd></div>' if route_km(e) else ""}
+      {f'<div><dt>High point</dt><dd>+{e["high_m"]:,} m</dd></div>' if e.get("high_m") else ""}
+      {f'<div><dt>Group</dt><dd>{e["group"]}{" · " + str(e["placesLeft"]) + " left" if e.get("placesLeft") else ""}</dd></div>' if e.get("group") else ""}
     </dl>
   </a>
 </li>""")
-    return (head(d, "Expeditions — Hiking Club", "Upcoming Hiking Club expeditions: dates, difficulty, distance, places left.", "expeditions", ("contours",))
+    return (head(d, "Expeditions — Hiking Club", "Hiking Club’s trips: the day hikes so far and the expeditions in planning.", "expeditions", ("contours",))
             + header(d, "expeditions/") + '<main id="main">'
-            + page_head(d, "01", "Expeditions", "Upcoming<br><em>trips.</em>",
-                        "From day hikes near Stockholm to week-long trips in the mountains. Every trip has its own page with dates, difficulty, route and packing list.", "abisko")
+            + page_head(d, "01", "Expeditions", "Our<br><em>trips.</em>",
+                        "Day hikes in the nature reserves around Stockholm, and the club’s first expeditions to the mountains, in planning. Every trip has its own page.", "abisko")
             + f"""<section class="section exp-up" data-theme="paper" aria-labelledby="up-title">
-  {rowhead("01", "Upcoming", f"{len(up)} trips")}
+  {rowhead("01", "In planning", f"{len(up)} expeditions")}
   <h2 id="up-title" class="visually-hidden">Upcoming expeditions</h2>
   <ol class="dossier-rows">{"".join(rows)}</ol>
 </section>
@@ -554,11 +559,16 @@ def expedition(e):
     i = EXP.index(e)
     prev_e, next_e = EXP[i - 1] if i else None, EXP[i + 1] if i + 1 < len(EXP) else None
     dist = hav(SSE, (e["lat"], e["lon"]))
-    spec = [("Dates", e["dates"]), ("Status", status_tag(e)), ("Difficulty", grade(e["difficulty"]) + f'{e["difficultyLabel"]}, {e["difficulty"]} of 5'),
-            ("Terrain", esc(e["terrain"])), ("Distance", f'{km(route_km(e))} km' + (" over " + str(e["days"]) + " days" if e["days"] > 1 else "")),
-            ("Ascent", f'+{(r["gain"] if r else e["ascent_m"]):,} m'), ("High point", f'+{e["high_m"]:,} m, {esc(e["highName"])}'),
-            ("Group", f'{e["group"]}' + (f' — {e["placesLeft"]} places left' if e.get("placesLeft") else "")),
-            ("Getting there", esc(e["transport"])), ("From SSE", f"{km(dist)} km in a straight line"), ("Weather", esc(e["climate"]))]
+    rk = route_km(e)
+    spec = [("Dates", e["dates"]), ("Status", status_tag(e)), ("Difficulty", grade(e["difficulty"]) + f'{e["difficultyLabel"]}, {e["difficulty"]} of 5')]
+    if e.get("terrain"): spec.append(("Terrain", esc(e["terrain"])))
+    if rk: spec.append(("Distance", f'{km(rk)} km' + (" over " + str(e["days"]) + " days" if e["days"] > 1 else "")))
+    if r or e.get("ascent_m"): spec.append(("Ascent", f'+{(r["gain"] if r else e["ascent_m"]):,} m'))
+    if e.get("high_m"): spec.append(("High point", f'+{e["high_m"]:,} m, {esc(e["highName"])}'))
+    if e.get("group"): spec.append(("Group", f'{e["group"]}' + (f' — {e["placesLeft"]} places left' if e.get("placesLeft") else "")))
+    if e.get("transport"): spec.append(("Getting there", esc(e["transport"])))
+    spec.append(("From SSE", f"{km(dist)} km in a straight line"))
+    if e.get("climate"): spec.append(("Weather", esc(e["climate"])))
     if e.get("leaders"): spec.append(("Leaders", esc(e["leaders"])))
     if e.get("cost"): spec.append(("Cost", esc(e["cost"])))
     spec_html = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in spec)
@@ -644,9 +654,10 @@ def expedition(e):
 
     gallery = "".join(f'<figure class="gal-item frame" data-reveal="image">{img(d, n, cap, "(min-width: 900px) 45vw, 100vw", frame=4 / 3)}<figcaption><b>{no}</b> {esc(cap)}</figcaption></figure>'
                       for n, no, cap in e["images"]["gallery"][1:])
-    cta = {"registering": f'<a class="btn btn-snow" href="{u(d, "join/")}?trip={e["no"]}">Register for {e["no"]}<span class="btn-arrow" aria-hidden="true">→</span></a><p class="small">Registration closes {e.get("closes", "")}. {e.get("placesLeft", "")} of {e["group"]} places left.</p>',
+    cta = {"registering": f'<a class="btn btn-snow" href="{u(d, "join/")}?trip={e["no"]}">Register for {e["no"]}<span class="btn-arrow" aria-hidden="true">→</span></a><p class="small">Registration closes {e.get("closes", "")}. {e.get("placesLeft", "")} of {e.get("group", "")} places left.</p>',
+           "planned": f'<p class="h-lg">In planning. Dates to be announced.</p><a class="btn btn-snow" href="{u(d, "join/")}">Become a member to hear first<span class="btn-arrow" aria-hidden="true">→</span></a>',
            "announced": f'<p class="h-lg">Registration opens {e.get("opens", "")}.</p><a class="btn btn-snow" href="{u(d, "join/")}">Become a member to hear first<span class="btn-arrow" aria-hidden="true">→</span></a>',
-           "completed": f'<p class="h-lg">Completed, {e["short"]}.</p><a class="btn btn-snow" href="{u(d, "expeditions/")}">See upcoming trips<span class="btn-arrow" aria-hidden="true">→</span></a>'}[e["status"]]
+           "completed": f'<p class="h-lg">Completed, {e["dates"]}.</p><a class="btn btn-snow" href="{u(d, "expeditions/")}">See all trips<span class="btn-arrow" aria-hidden="true">→</span></a>'}[e["status"]]
     pn = (f'<a class="pn pn-prev" href="{exp_url(d, prev_e)}"><span class="label">← Exp. {prev_e["no"]}</span><span class="pn-name">{esc(prev_e["name"])}</span></a>' if prev_e else "<span></span>") + \
          (f'<a class="pn pn-next" href="{exp_url(d, next_e)}"><span class="label">Exp. {next_e["no"]} →</span><span class="pn-name">{esc(next_e["name"])}</span></a>' if next_e else "<span></span>")
     title = f'Expedition {e["no"]} — {e["name"]} — Hiking Club'
@@ -685,16 +696,17 @@ def expedition(e):
 # ------------------------------------------------------------------ archive
 def archive():
     d = 1
-    years = sorted({e["year"] for e in EXP}, reverse=True)
+    DONE = [e for e in EXP if e["status"] == "completed"]
+    years = sorted({e["year"] for e in DONE}, reverse=True)
     groups = []
     for y in years:
-        es = [e for e in EXP if e["year"] == y]
+        es = [e for e in DONE if e["year"] == y]
         groups.append(f'<li class="year"><p class="year-no label tnum">{y}</p><ol class="log">{"".join(log_row(d, e, "" if e["status"] == "completed" else " log-next") for e in reversed(es))}</ol></li>')
     cards = "".join(f"""<a class="amap-card" data-card="{e["no"]}" href="{exp_url(d, e)}" tabindex="-1" aria-hidden="true">
   <span class="amap-photo">{img(d, e["images"]["hero"], "", "22vw", frame=4 / 3)}</span>
   <span class="label tnum">{e["no"]} · {e["short"]}</span><span class="amap-name">{esc(e["name"])}</span>
-  <span class="label">{esc(e["region"])}</span></a>""" for e in EXP)
-    links = "".join(f'<li><a href="{exp_url(d, e)}" data-hover="{e["no"]}"><span class="tnum">{e["no"]}</span> {esc(e["name"])}</a></li>' for e in EXP)
+  <span class="label">{esc(e["region"])}</span></a>""" for e in DONE)
+    links = "".join(f'<li><a href="{exp_url(d, e)}" data-hover="{e["no"]}"><span class="tnum">{e["no"]}</span> {esc(e["name"])}</a></li>' for e in DONE)
     return (head(d, "Archive — Hiking Club", "Every trip Hiking Club has made, by year and on the map, with photographs.", "archive", ("contours",))
             + header(d, "archive/") + '<main id="main">'
             + page_head(d, "02", "Archive", "Past<br><em>trips.</em>", "Every trip the club has made, listed by year and shown on the map.", "kebnekaise",
@@ -702,7 +714,7 @@ def archive():
             + f"""<section class="section archive-body" data-theme="paper" data-view-root="list" aria-label="Expeditions">
   <div class="archive-list"><ol class="years">{"".join(groups)}</ol></div>
   <div class="archive-map">
-    <div class="amap">{scandi(d, None, True, "scandi--archive")}{cards}</div>
+    <div class="amap">{scandi(d, None, True, "scandi--archive", done=True)}{cards}</div>
     <ol class="amap-index">{links}</ol>
   </div>
 </section>
@@ -721,8 +733,7 @@ def activities():
   <div><dt>Group</dt><dd class="tnum">{a["group"]}</dd></div><div><dt>Equipment</dt><dd>{a["equipment"]}</dd></div>
 </dl>{f'<div class="act-past" data-reveal><p class="label">Past</p><ul>{past}</ul></div>' if past else ""}"""
         env = {"hiking": contours("abisko", 0.16, "act-contours"),
-               "climbing": '<canvas class="rock" data-rock aria-hidden="true"></canvas>',
-               "alpine": '<div class="act-white" aria-hidden="true"></div>',
+               "mountaineering": '<div class="act-white" aria-hidden="true"></div>',
                "winter": '<canvas class="snowfall" data-snow aria-hidden="true"></canvas>',
                "expeditions": f'<div class="act-map">{scandi(d, None, True, "scandi--act")}</div>'}[a["key"]]
         scenes.append(f"""<section id="{a["key"]}" class="act act--{a["key"]} scene" data-scene data-theme="{ {"expeditions": "navy", "hiking": "pine"}.get(a["key"], "paper") }" aria-labelledby="act-{a["key"]}">
@@ -731,15 +742,15 @@ def activities():
     <figure class="act-img frame"><div class="para" data-speed="0.06">{img(d, a["img"], "", "(min-width: 900px) 40vw, 100vw", vt="act-" + a["key"], frame=0.86)}</div></figure>
     <div class="act-text">
       <p class="label tnum">0{i + 1} / 0{len(ACT)}</p>
-      <h2 id="act-{a["key"]}" class="act-h">{a["name"]}</h2>
+      <h2 id="act-{a["key"]}" class="act-h" style="--n:{len(a["name"])}">{a["name"]}</h2>
       <p class="act-lead" data-reveal>{esc(a["text"])}</p>
       {meta}
     </div>
   </div>
 </section>""")
-    return (head(d, "Activities — Hiking Club", "Hiking, climbing, alpine trips, winter activities and expeditions with Hiking Club at SASSE.", "activities", ("contours", "rock"))
+    return (head(d, "Activities — Hiking Club", "Hiking, mountaineering, winter activities and expeditions with Hiking Club at SASSE.", "activities", ("contours",))
             + header(d, "activities/") + '<main id="main">'
-            + page_head(d, "03", "Activities", "What we<br><em>do.</em>", "Hiking, climbing, alpine trips, winter activities and expeditions. Each has its own season, level and equipment list.", None,
+            + page_head(d, "03", "Activities", "What we<br><em>do.</em>", "Hiking, mountaineering, winter activities and expeditions. Each has its own season, level and equipment list.", None,
                         '<ol class="act-index label">' + "".join(f'<li><a href="#{a["key"]}"><span class="tnum">0{i + 1}</span> {a["name"]}</a></li>' for i, a in enumerate(ACT)) + "</ol>")
             + "".join(scenes) + join_band(d) + "</main>" + footer(d))
 
@@ -750,8 +761,9 @@ RULES = [("I", "The group sets the pace."), ("II", "Safety comes before<br>the s
 
 def club():
     d = 1
-    first = min(EXP, key=lambda e: e["no"])
-    hist = "".join(f'<li data-reveal><span class="label tnum">{e["short"]}</span><span class="hist-no tnum">{e["no"]}</span><span class="hist-name">{esc(e["name"])}</span><span class="small">{esc(e["category"])}</span></li>' for e in EXP)
+    DONE = [e for e in EXP if e["status"] == "completed"]
+    first = DONE[0]
+    hist = "".join(f'<li data-reveal><span class="label tnum">{e["short"]}</span><span class="hist-no tnum">{e["no"]}</span><span class="hist-name">{esc(e["name"])}</span><span class="small">{esc(e["category"])}</span></li>' for e in DONE)
     rules = "".join(f'<section class="rule-scene" aria-label="Principle {n}"><p class="rule-no label">Principle {n}</p><p class="rule-text">{t}</p></section>' for n, t in RULES)
     return (head(d, "The Club — Hiking Club", "About Hiking Club, a student club of SASSE at the Stockholm School of Economics: who we are, how we work, and how we keep trips safe.", "club", ("contours",))
             + header(d, "the-club/") + '<main id="main">'
@@ -783,9 +795,9 @@ def club():
   {rowhead("02", "Safety", "On every trip")}
   <h2 id="safety-title" class="h-lg" data-lines>Safety<br><em>first.</em></h2>
   <ol class="safety">
-    <li data-reveal><span class="tnum">01</span><p><b>Certified guides</b> on all glacier and alpine trips. Club trip leaders are trained in first aid and navigation.</p></li>
+    <li data-reveal><span class="tnum">01</span><p><b>Certified guides</b> on mountaineering routes that need them. Club trip leaders are trained in first aid and navigation.</p></li>
     <li data-reveal><span class="tnum">02</span><p><b>A plan for every trip</b>, with the route, turnaround time and equipment list, shared a week before departure.</p></li>
-    <li data-reveal><span class="tnum">03</span><p><b>Small groups.</b> At most six people per rope team, and at least two leaders on every multi-day trip.</p></li>
+    <li data-reveal><span class="tnum">03</span><p><b>Small groups</b>, and at least two leaders on every multi-day trip.</p></li>
     <li data-reveal><span class="tnum">04</span><p><b>Weather decides.</b> Trips are moved or shortened whenever the conditions require it.</p></li>
   </ol>
 </section>
@@ -815,7 +827,7 @@ def club():
 # ------------------------------------------------------------------ join
 FAQ = [
     ("I have never hiked. Can I join?", "Yes. Most trips require no experience, and those that do say so on the trip page. A day hike is a good place to start."),
-    ("Do I need my own equipment?", "You need boots and a waterproof jacket. Technical equipment such as harnesses, crampons, ice axes and helmets can be borrowed from the club."),
+    ("Do I need my own equipment?", "You need boots and a waterproof jacket. Equipment for winter and mountain trips, such as crampons and ice axes, can be borrowed from the club."),
     ("How are places on trips allocated?", "Members register when registration for a trip opens. If a trip is full there is a waiting list, and members who have not joined a multi-day trip before get priority."),
     ("What does it cost?", "Membership follows SASSE’s club fees. Trips are priced at cost (travel, accommodation, guides and food), and the price is published before registration opens."),
     ("Is the club only for Bachelor students?", "No. Bachelor, Master, PhD and exchange students with a SASSE membership are all welcome."),
@@ -875,8 +887,8 @@ def join():
       <label><span>Name</span><input name="name" autocomplete="name" required></label>
       <label><span>SSE email</span><input name="email" type="email" autocomplete="email" required placeholder="12345@student.hhs.se"></label>
       <label><span>Programme</span><select name="programme" required><option value="">Choose</option><option>Bachelor</option><option>Master</option><option>Exchange</option><option>PhD</option></select></label>
-      <label><span>Experience</span><select name="experience" required><option value="">Choose</option><option>New to it</option><option>Some hiking</option><option>Climbing or alpine</option></select></label>
-      <label class="join-check"><input type="checkbox" name="trip" value="Expedition 004 — Abisko"><span>Also register me for Expedition 004, Abisko</span></label>
+      <label><span>Experience</span><select name="experience" required><option value="">Choose</option><option>New to it</option><option>Some hiking</option><option>Mountaineering</option></select></label>
+      <label class="join-check"><input type="checkbox" name="trip" value="Interested in the Abisko expedition"><span>Tell me when the Abisko expedition opens</span></label>
       <button class="btn btn-snow" type="submit">Become a member<span class="btn-arrow" aria-hidden="true">→</span></button>
       <p class="join-status small" role="status"></p>
     </form>
@@ -893,10 +905,16 @@ def write(rel, text):
 
 
 if __name__ == "__main__":
+    BY_SLUG = {e["slug"] for e in EXP}
     write("index.html", home())
     write("expeditions/index.html", expeditions())
     for e in EXP:
         write(f"expeditions/{e['slug']}/index.html", expedition(e))
+    # a trip taken out of the data takes its page with it
+    import shutil
+    for old in (ROOT / "expeditions").glob("[0-9][0-9][0-9]-*"):
+        if old.is_dir() and old.name not in BY_SLUG:
+            shutil.rmtree(old); print("removed", old.relative_to(ROOT))
     write("archive/index.html", archive())
     write("activities/index.html", activities())
     write("the-club/index.html", club())
